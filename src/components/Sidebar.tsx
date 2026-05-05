@@ -17,23 +17,24 @@ interface SidebarProps {
 }
 
 const modules: { id: ModuleId; icon: any; label: string }[] = [
-  { id: 'command', icon: Terminal, label: 'COMMAND' },
-  { id: 'math', icon: Calculator, label: 'MATHEMATICS' },
-  { id: 'polyglot', icon: Languages, label: 'POLYGLOT' },
-  { id: 'creative', icon: Palette, label: 'CREATIVE' },
-  { id: 'engineering', icon: Code2, label: 'ENGINEERING' },
-  { id: 'memory', icon: Database, label: 'MEMORY' },
+  { id: 'kosmos', icon: Cpu, label: 'KOSMOS_CORE' },
+  { id: 'command', icon: Terminal, label: 'COMMAND_CENTER' },
+  { id: 'math', icon: Calculator, label: 'QUANT_SYNAPSE' },
+  { id: 'polyglot', icon: Languages, label: 'LOGIC_TRANS' },
+  { id: 'creative', icon: Palette, label: 'SYNTHESIS_LAB' },
+  { id: 'engineering', icon: Code2, label: 'GOD_INTEL_OS' },
+  { id: 'memory', icon: Database, label: 'COLLECTIVE_BANK' },
 ];
 
 export default function Sidebar({ currentModule, onModuleChange }: SidebarProps) {
   return (
     <div id="konda-sidebar" className="w-64 h-full bg-[#050505] border-r border-[#1A1A1A] flex flex-col p-6 z-20">
       <div className="flex flex-col gap-1 mb-12">
-        <div className="text-[10px] tracking-[0.4em] uppercase font-bold text-[#00D1FF] mb-1">
-          Personal OS
+        <div className="text-[10px] tracking-[0.4em] uppercase font-bold text-[#FF3E00] mb-1">
+          God-Level Intelligence
         </div>
         <h1 className="text-xl font-light tracking-tighter text-[#F5F5F5]">
-          KONDA <span className="opacity-20 font-mono text-[10px] tracking-normal">V2.0.4</span>
+          KONDA <span className="opacity-20 font-mono text-[10px] tracking-normal">GOD_INTEL_V1</span>
         </h1>
       </div>
 
@@ -48,13 +49,13 @@ export default function Sidebar({ currentModule, onModuleChange }: SidebarProps)
               className={cn(
                 "w-full flex items-center gap-4 px-0 py-3 text-[10px] tracking-[0.25em] uppercase font-medium transition-all duration-300 group relative",
                 isActive 
-                  ? "text-[#00D1FF]"
+                  ? "text-[#FF3E00]"
                   : "text-[#F5F5F5]/30 hover:text-[#F5F5F5]/80"
               )}
             >
               <div className={cn(
                 "absolute left-[-24px] w-[2px] h-full transition-all duration-500",
-                isActive ? "bg-[#00D1FF]" : "bg-transparent"
+                isActive ? "bg-[#FF3E00]" : "bg-transparent"
               )} />
               <Icon className={cn("w-3.5 h-3.5 transition-transform duration-500", isActive ? "scale-110" : "opacity-40 group-hover:opacity-100")} />
               <span>{mod.label}</span>
@@ -74,7 +75,7 @@ export default function Sidebar({ currentModule, onModuleChange }: SidebarProps)
         <div className="flex justify-between items-end border-t border-[#1A1A1A] pt-4">
           <div>
             <div className="text-[8px] uppercase tracking-widest opacity-20 mb-1">Status</div>
-            <div className="text-[9px] text-[#00D1FF] font-mono uppercase tracking-widest">Autonomous</div>
+            <div className="text-[9px] text-[#FF3E00] font-mono uppercase tracking-widest">Autonomous</div>
           </div>
           <div className="text-right">
              <div className="text-[8px] uppercase tracking-widest opacity-20 mb-1">Load</div>
