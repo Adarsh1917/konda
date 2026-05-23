@@ -7,10 +7,11 @@ import CreativeModule from './components/CreativeModule';
 import PolyglotModule from './components/PolyglotModule';
 import EngineeringModule from './components/EngineeringModule';
 import MemoryModule from './components/MemoryModule';
+import BujjiCompanion from './components/BujjiCompanion';
 import ShortcutManager from './components/ShortcutManager';
 import { useShortcuts } from './hooks/useShortcuts';
 import { useAdaptiveLearning } from './hooks/useAdaptiveLearning';
-import { ModuleId, OSState, Message, Shortcut, ProficiencyScore, ThinkingStatus, FileAttachment } from './types';
+import { ModuleId, OSState, Message, Shortcut, ProficiencyScore, ThinkingStatus, FileAttachment, AIModel } from './types';
 import { kondaChat } from './services/kondaService';
 import { generateId, cn } from './lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -112,6 +113,13 @@ export default function App() {
   const [showShareToast, setShowShareToast] = useState(false);
   const [isShortcutManagerOpen, setIsShortcutManagerOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [selectedModel, setSelectedModel] = useState<AIModel>('auto');
+  const [isBujjiOpen, setIsBujjiOpen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth > 1150;
+    }
+    return false;
+  });
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -154,6 +162,23 @@ export default function App() {
   const handleClearChat = useCallback(() => {
     setState(s => ({ ...s, messages: [] }));
   }, []);
+
+  useEffect(() => {
+    const handleGlobalArchive = () => {
+      handleArchiveChat();
+    };
+    const handleBujjiToggle = () => {
+      setIsBujjiOpen(b => !b);
+    };
+
+    window.addEventListener('archive-session', handleGlobalArchive);
+    window.addEventListener('toggle-bujji-visibility', handleBujjiToggle);
+
+    return () => {
+      window.removeEventListener('archive-session', handleGlobalArchive);
+      window.removeEventListener('toggle-bujji-visibility', handleBujjiToggle);
+    };
+  }, [handleArchiveChat]);
 
   const shortcuts: Shortcut[] = useMemo(() => [
     {
@@ -312,6 +337,7 @@ export default function App() {
     });
 
     const mode = state.currentModule === 'casual' ? 'casual' : 'intel';
+    const activeMood = localStorage.getItem('bujji_mood') || 'witty';
     let fullText = "";
 
     try {
@@ -334,7 +360,9 @@ export default function App() {
             });
             return { ...s, messages: updated };
           });
-        }
+        },
+        selectedModel,
+        activeMood
       );
 
       if (controller.signal.aborted) return;
@@ -376,7 +404,7 @@ export default function App() {
         abortControllerRef.current = null;
       }
     }
-  }, [state.messages, state.currentModule, handleClearChat]);
+  }, [state.messages, state.currentModule, handleClearChat, selectedModel]);
 
   return (
     <div id="os-root" className="fixed inset-0 bg-[#0A0A0A] flex overflow-hidden font-sans antialiased text-[#F5F5F5] selection:bg-[#FF3E00] selection:text-white">
@@ -455,6 +483,23 @@ export default function App() {
             
             <div className="flex gap-2">
               <button 
+                onClick={() => setIsBujjiOpen(!isBujjiOpen)}
+                className={cn(
+                  "px-3 h-8 border rounded-full flex items-center gap-2 text-[10px] tracking-[0.1em] uppercase font-mono cursor-pointer transition-all",
+                  isBujjiOpen 
+                    ? "bg-[#FF3E00]/15 border-[#FF3E00]/40 text-[#FF3E00] font-bold shadow-[0_0_8px_rgba(255,62,0,0.15)]" 
+                    : "border-[#333] text-white/50 hover:border-[#FF3E00]/50 hover:text-white"
+                )}
+                title="Toggle Bujji Holographic Companion Core"
+              >
+                <span className={cn(
+                  "w-1.5 h-1.5 rounded-full transition-all duration-300",
+                  isBujjiOpen ? "bg-[#FF3E00] animate-pulse" : "bg-white/20"
+                )} />
+                <span>Bujji Core</span>
+              </button>
+
+              <button 
                 onClick={() => setIsShortcutManagerOpen(true)}
                 className="w-8 h-8 border border-[#333] rounded-full flex items-center justify-center text-[10px] hover:border-[#FF3E00] cursor-pointer transition-all hover:text-[#FF3E00] group relative"
                 title="Shortcuts (Shift + ?)"
@@ -486,29 +531,68 @@ export default function App() {
           </div>
         </header>
 
-        {/* Dynamic Module Layer */}
-        <div className="flex-1 relative overflow-hidden">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={state.currentModule}
-              initial={{ opacity: 0, scale: 0.99, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 1.01, y: -10 }}
-              transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-              className="absolute inset-0"
-            >
-              <ModuleSelector 
-                moduleId={state.currentModule} 
-                messages={state.messages}
-                onSendMessage={handleSendMessage}
-                onClearChat={handleClearChat}
-                onArchiveChat={handleArchiveChat}
-                thinkingStatus={state.thinkingStatus}
-                proficiency={state.proficiency}
-                recommendations={getRecommendations()}
-                onSwitchModule={handleModuleChange}
-              />
-            </motion.div>
+        {/* Dynamic Module Layer & Collapsible Bujji Companion Side Panel */}
+        <div className="flex-1 flex relative overflow-hidden">
+          <div className="flex-1 relative overflow-hidden h-full">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={state.currentModule}
+                initial={{ opacity: 0, scale: 0.99, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 1.01, y: -10 }}
+                transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                className="absolute inset-0"
+              >
+                <ModuleSelector 
+                  moduleId={state.currentModule} 
+                  messages={state.messages}
+                  onSendMessage={handleSendMessage}
+                  onClearChat={handleClearChat}
+                  onArchiveChat={handleArchiveChat}
+                  thinkingStatus={state.thinkingStatus}
+                  proficiency={state.proficiency}
+                  recommendations={getRecommendations()}
+                  onSwitchModule={handleModuleChange}
+                  selectedModel={selectedModel}
+                  setSelectedModel={setSelectedModel}
+                />
+              </motion.div>
+            </AnimatePresence>
+          </div>
+
+          {/* Interactive Collapsible Side Panel for Bujji Companion */}
+          <AnimatePresence>
+            {isBujjiOpen && (
+              <motion.div
+                initial={{ width: 0, opacity: 0 }}
+                animate={{ width: isMobile ? '100%' : '350px', opacity: 1 }}
+                exit={{ width: 0, opacity: 0 }}
+                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                className={cn(
+                  "h-full shrink-0 border-l border-white/5 z-30 overflow-hidden bg-[#070707]",
+                  isMobile ? "fixed inset-y-0 right-0 w-full" : "relative"
+                )}
+              >
+                {/* Close Button on mobile view */}
+                {isMobile && (
+                  <button 
+                    onClick={() => setIsBujjiOpen(false)}
+                    className="absolute top-4 right-4 z-50 p-2 rounded-full bg-black/50 border border-white/10 text-white/60 hover:text-white cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+                <div className="w-[350px] md:w-full h-full">
+                  <BujjiCompanion 
+                    onSendMessage={handleSendMessage} 
+                    messages={state.messages} 
+                    isThinking={state.thinkingStatus !== 'idle'} 
+                    selectedModel={selectedModel} 
+                    setSelectedModel={setSelectedModel} 
+                  />
+                </div>
+              </motion.div>
+            )}
           </AnimatePresence>
         </div>
 
@@ -534,7 +618,7 @@ export default function App() {
   );
 }
 
-function ModuleSelector({ moduleId, messages, onSendMessage, onClearChat, onArchiveChat, thinkingStatus, proficiency, recommendations, onSwitchModule }: { 
+function ModuleSelector({ moduleId, messages, onSendMessage, onClearChat, onArchiveChat, thinkingStatus, proficiency, recommendations, onSwitchModule, selectedModel, setSelectedModel }: { 
   moduleId: ModuleId, 
   messages: Message[],
   onSendMessage: (val: string, files?: FileAttachment[]) => void,
@@ -543,14 +627,16 @@ function ModuleSelector({ moduleId, messages, onSendMessage, onClearChat, onArch
   thinkingStatus: ThinkingStatus,
   proficiency: ProficiencyScore[],
   recommendations: ProficiencyScore[],
-  onSwitchModule: (id: ModuleId) => void
+  onSwitchModule: (id: ModuleId) => void,
+  selectedModel: AIModel,
+  setSelectedModel: (model: AIModel) => void
 }) {
   const isThinking = thinkingStatus !== 'idle';
   switch (moduleId) {
     case 'casual':
-      return <KosmosModule messages={messages} onSendMessage={onSendMessage} isThinking={isThinking} thinkingStatus={thinkingStatus} onSwitchModule={onSwitchModule} />;
+      return <KosmosModule messages={messages} onSendMessage={onSendMessage} isThinking={isThinking} thinkingStatus={thinkingStatus} onSwitchModule={onSwitchModule} selectedModel={selectedModel} setSelectedModel={setSelectedModel} />;
     case 'command':
-      return <CommandCenter messages={messages} onSendMessage={onSendMessage} onClearChat={onClearChat} onArchiveChat={onArchiveChat} isThinking={isThinking} thinkingStatus={thinkingStatus} recommendations={recommendations} />;
+      return <CommandCenter messages={messages} onSendMessage={onSendMessage} onClearChat={onClearChat} onArchiveChat={onArchiveChat} isThinking={isThinking} thinkingStatus={thinkingStatus} recommendations={recommendations} selectedModel={selectedModel} setSelectedModel={setSelectedModel} />;
     case 'math':
       return <MathModule />;
     case 'language':

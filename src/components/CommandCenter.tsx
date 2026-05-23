@@ -7,7 +7,7 @@ import * as XLSX from 'xlsx';
 import { Bot, User, ArrowRight, Mic, X, Volume2, VolumeX, Trash2, Plus, Image as ImageIcon, FileText, Camera, Upload, Save, Download, Share2, Table, RefreshCcw, GitFork, ShieldCheck, Zap, Copy, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
-import { Message, SavedSession, ProficiencyScore, ThinkingStatus, FileAttachment } from '../types';
+import { Message, SavedSession, ProficiencyScore, ThinkingStatus, FileAttachment, AIModel } from '../types';
 import { useVoice } from '../hooks/useVoice';
 import { StreamingMarkdown } from './StreamingMarkdown';
 
@@ -18,6 +18,16 @@ declare module 'jspdf' {
   }
 }
 
+const modelOptions = [
+  { id: 'auto', label: 'Auto Mode', icon: '🧠', desc: 'Auto-route tasks' },
+  { id: 'gpt55', label: 'GPT-5.5', icon: '⚡', desc: 'Universal reasoning & planning' },
+  { id: 'claude_opus4', label: 'Claude Opus 4', icon: '🖋️', desc: 'Deep cognition & philosophy' },
+  { id: 'gemini_pro', label: 'Gemini Pro', icon: '🔮', desc: 'Multimodal files & analysis' },
+  { id: 'gemini_flash', label: 'Gemini Flash', icon: '🚀', desc: 'Speed & latency optimized' },
+  { id: 'deepseek_coder', label: 'DeepSeek Coder', icon: '💻', desc: 'Elite programming & debugging' },
+  { id: 'flux_image', label: 'Flux Image', icon: '🎨', desc: 'Visual synthesis & design' },
+];
+
 interface CommandCenterProps {
   messages: Message[];
   onSendMessage: (content: string, files?: FileAttachment[]) => void;
@@ -26,9 +36,11 @@ interface CommandCenterProps {
   isThinking: boolean;
   thinkingStatus: ThinkingStatus;
   recommendations: ProficiencyScore[];
+  selectedModel: AIModel;
+  setSelectedModel: (model: AIModel) => void;
 }
 
-export default function CommandCenter({ messages, onSendMessage, onClearChat, onArchiveChat, isThinking, thinkingStatus, recommendations }: CommandCenterProps) {
+export default function CommandCenter({ messages, onSendMessage, onClearChat, onArchiveChat, isThinking, thinkingStatus, recommendations, selectedModel, setSelectedModel }: CommandCenterProps) {
   const [input, setInput] = useState('');
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [isAttachmentMenuOpen, setIsAttachmentMenuOpen] = useState(false);
@@ -37,6 +49,19 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [sessionTitle, setSessionTitle] = useState('');
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowModelDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const [completedStreamingIds, setCompletedStreamingIds] = useState<Set<string>>(() => new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -608,6 +633,63 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
                     ))}
                   </div>
                 )}
+                
+                {/* Modern Brain Selector */}
+                <div ref={dropdownRef} className="relative flex items-center">
+                  <button
+                    type="button"
+                    onClick={() => setShowModelDropdown(!showModelDropdown)}
+                    className={cn(
+                      "p-2 rounded-full transition-all text-white/30 hover:text-[#FF3E00] hover:bg-white/5 flex items-center justify-center text-sm cursor-pointer",
+                      selectedModel !== 'auto' ? "border border-[#FF3E00]/30 bg-[#FF3E00]/5 text-[#FF3E00] font-bold" : ""
+                    )}
+                    title="Orchestrated AI Model"
+                  >
+                    🧠
+                  </button>
+
+                  <AnimatePresence>
+                    {showModelDropdown && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: -10, scale: 1 }}
+                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                        className="absolute bottom-full right-0 mb-3 w-72 bg-[#0F0F0F] border border-white/10 rounded-xl shadow-2xl p-2 z-[60] backdrop-blur-md"
+                      >
+                        <div className="px-3 py-2 border-b border-white/5 mb-1.5 flex justify-between items-center">
+                          <span className="text-[9px] font-mono tracking-widest text-[#FF3E00] uppercase font-bold">Orchestration Core</span>
+                          <span className="text-[8px] font-mono text-white/40 uppercase">Active: {selectedModel === 'auto' ? 'Auto’' : selectedModel.toUpperCase()}</span>
+                        </div>
+                        {modelOptions.map((opt) => (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedModel(opt.id as any);
+                              setShowModelDropdown(false);
+                            }}
+                            className={cn(
+                              "w-full flex items-start gap-3 p-2 hover:bg-white/5 transition-all text-left rounded-lg group",
+                              selectedModel === opt.id ? "bg-white/[0.03] border border-white/5" : "border border-transparent"
+                            )}
+                          >
+                            <span className="text-sm select-none shrink-0">{opt.icon}</span>
+                            <div className="flex flex-col min-w-0">
+                              <span className={cn(
+                                "text-[11px] font-mono tracking-wide transition-colors",
+                                selectedModel === opt.id ? "text-[#FF3E00] font-bold" : "text-white/80 group-hover:text-white"
+                              )}>
+                                {opt.label}
+                              </span>
+                              <span className="text-[8px] text-white/40 line-clamp-1">{opt.desc}</span>
+                            </div>
+                          </button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
                 <button
                   type="button"
                   onClick={handleMicClick}
@@ -750,8 +832,9 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
                 </span>
               </button>
               
-              <div className="text-[10px] font-mono text-white/10 tracking-widest uppercase">
-                Terminal: Ready
+              <div className="text-[10px] font-mono text-[#FF3E00]/60 tracking-widest uppercase flex items-center gap-1.5 justify-end">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#FF3E00] animate-pulse"></span>
+                Node: {selectedModel === 'auto' ? 'AUTO-ROUTED' : selectedModel.toUpperCase().replace('_', ' ')}
               </div>
             </div>
           </div>

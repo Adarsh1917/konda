@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles, ArrowRight, Bot, User, Zap, MessageCircle, Send } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { Message, ModuleId, ThinkingStatus } from '../types';
+import { Message, ModuleId, ThinkingStatus, AIModel } from '../types';
 
 interface KosmosModuleProps {
   onSendMessage: (val: string) => void;
@@ -10,17 +10,41 @@ interface KosmosModuleProps {
   isThinking: boolean;
   thinkingStatus: ThinkingStatus;
   onSwitchModule: (mod: ModuleId) => void;
+  selectedModel: AIModel;
+  setSelectedModel: (model: AIModel) => void;
 }
 
-export default function KosmosModule({ onSendMessage, messages, isThinking, thinkingStatus, onSwitchModule }: KosmosModuleProps) {
+const modelOptions = [
+  { id: 'auto', label: 'Auto Mode', icon: '🧠', desc: 'Auto-route tasks' },
+  { id: 'gpt55', label: 'GPT-5.5', icon: '⚡', desc: 'Universal reasoning & planning' },
+  { id: 'claude_opus4', label: 'Claude Opus 4', icon: '🖋️', desc: 'Deep cognition & philosophy' },
+  { id: 'gemini_pro', label: 'Gemini Pro', icon: '🔮', desc: 'Multimodal files & analysis' },
+  { id: 'gemini_flash', label: 'Gemini Flash', icon: '🚀', desc: 'Speed & latency optimized' },
+  { id: 'deepseek_coder', label: 'DeepSeek Coder', icon: '💻', desc: 'Elite programming & debugging' },
+  { id: 'flux_image', label: 'Flux Image', icon: '🎨', desc: 'Visual synthesis & design' },
+];
+
+export default function KosmosModule({ onSendMessage, messages, isThinking, thinkingStatus, onSwitchModule, selectedModel, setSelectedModel }: KosmosModuleProps) {
   const [input, setInput] = useState('');
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isThinking]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowModelDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -68,8 +92,10 @@ export default function KosmosModule({ onSendMessage, messages, isThinking, thin
         </div>
         <div className="flex items-center gap-4">
           <div className="flex flex-col items-end">
-            <div className="text-[8px] uppercase tracking-widest opacity-20">Uplink</div>
-            <div className="text-[9px] text-[#FF3E00] font-mono">STABLE</div>
+            <div className="text-[8px] uppercase tracking-widest opacity-20">Orchestrated Node</div>
+            <div className="text-[9px] text-[#FF3E00] font-mono whitespace-nowrap">
+              {selectedModel === 'auto' ? 'AUTO-ROUTED' : selectedModel.toUpperCase().replace('_', ' ')}
+            </div>
           </div>
           <div className="w-10 h-10 border border-white/10 rounded-full flex items-center justify-center">
             <Sparkles className="w-4 h-4 text-[#FF3E00]" />
@@ -154,23 +180,82 @@ export default function KosmosModule({ onSendMessage, messages, isThinking, thin
       <div className="p-8 bg-black/40 border-t border-white/5 z-10">
         <form 
           onSubmit={handleSubmit}
-          className="max-w-4xl mx-auto relative group"
+          className="max-w-4xl mx-auto relative group flex items-center"
         >
-          <input 
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            disabled={isThinking}
-            placeholder="Type your casual query..."
-            className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-8 pr-16 text-sm focus:outline-none focus:border-[#FF3E00]/30 transition-all placeholder:opacity-20"
-          />
-          <button 
-            type="submit"
-            disabled={!input.trim() || isThinking}
-            className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 bg-[#FF3E00] text-black rounded-lg flex items-center justify-center hover:bg-[#FF3E00]/80 transition-all disabled:opacity-20 disabled:grayscale"
-          >
-            <Send className="w-4 h-4" />
-          </button>
+          <div className="relative w-full">
+            <input 
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              disabled={isThinking}
+              placeholder="Type your casual query..."
+              className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-8 pr-28 text-sm focus:outline-none focus:border-[#FF3E00]/30 transition-all placeholder:opacity-20 text-white"
+            />
+            
+            {/* Model Selector Button and Dropdown wrapper */}
+            <div ref={dropdownRef} className="absolute right-13 top-1/2 -translate-y-1/2 flex items-center">
+              <button
+                type="button"
+                onClick={() => setShowModelDropdown(!showModelDropdown)}
+                className={cn(
+                  "w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:bg-white/5 text-base cursor-pointer",
+                  selectedModel !== 'auto' ? "border border-[#FF3E00]/30 bg-[#FF3E00]/5" : ""
+                )}
+                title="Orchestrated AI Model"
+              >
+                🧠
+              </button>
+
+              <AnimatePresence>
+                {showModelDropdown && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: -10, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    className="absolute bottom-full right-0 mb-3 w-72 bg-[#0A0A0A] border border-white/10 rounded-xl shadow-2xl p-2 z-[60] backdrop-blur-md"
+                  >
+                    <div className="px-3 py-2 border-b border-white/5 mb-1.5 flex justify-between items-center">
+                      <span className="text-[9px] font-mono tracking-widest text-[#FF3E00] uppercase font-bold">Orchestration Core</span>
+                      <span className="text-[8px] font-mono text-white/40 uppercase">Active: {selectedModel === 'auto' ? 'Auto-Route' : selectedModel.toUpperCase()}</span>
+                    </div>
+                    {modelOptions.map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedModel(opt.id as any);
+                          setShowModelDropdown(false);
+                        }}
+                        className={cn(
+                          "w-full flex items-start gap-3 p-2.5 hover:bg-white/5 transition-all text-left rounded-lg group",
+                          selectedModel === opt.id ? "bg-white/[0.03] border border-white/5" : "border border-transparent"
+                        )}
+                      >
+                        <span className="text-base select-none shrink-0">{opt.icon}</span>
+                        <div className="flex flex-col min-w-0">
+                          <span className={cn(
+                            "text-xs font-mono tracking-wide transition-colors",
+                            selectedModel === opt.id ? "text-[#FF3E00] font-bold" : "text-white/80 group-hover:text-white"
+                          )}>
+                            {opt.label}
+                          </span>
+                          <span className="text-[9px] text-white/40 line-clamp-1">{opt.desc}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            <button 
+              type="submit"
+              disabled={!input.trim() || isThinking}
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 bg-[#FF3E00] text-black rounded-lg flex items-center justify-center hover:bg-[#FF3E00]/80 transition-all disabled:opacity-20 disabled:grayscale"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
         </form>
         <div className="mt-4 flex justify-center gap-6">
            <QuickAction icon={Zap} label="Math" onClick={() => onSwitchModule('math')} />

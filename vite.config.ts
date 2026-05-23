@@ -16,9 +16,8 @@ export default defineConfig(({mode}) => {
       },
     },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
-      hmr: process.env.DISABLE_HMR !== 'true',
+      // Completely disable HMR WebSocket to avoid unencrypted retry loops in production/sandboxed environments.
+      hmr: false,
     },
   };
 });

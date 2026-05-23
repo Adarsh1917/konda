@@ -1,4 +1,47 @@
-import { ThinkingStatus } from "../types";
+import { ThinkingStatus, AIModel } from "../types";
+
+export function classifyTask(content: string, hasFiles: boolean): AIModel {
+  if (hasFiles) {
+    return 'gemini_pro';
+  }
+
+  const query = content.toLowerCase().trim();
+
+  // 1. Image editing/generation → Flux
+  const imageKeywords = [
+    'draw', 'paint', 'sketch', 'generate an image', 'generate a picture',
+    'create a photo', 'visual design', 'cinematic illustration', 'render',
+    'blueprint', 'vector graphic', 'mockup', 'flux', 'fal.ai', 'unsplash',
+    'draw a ', 'paint a ', 'picture of'
+  ];
+  if (imageKeywords.some(kw => query.includes(kw))) {
+    return 'flux_image';
+  }
+
+  // 2. Coding → DeepSeek
+  const codingKeywords = [
+    'code', 'program', 'developer', 'react', 'typescript', 'vite', 'javascript',
+    'function', 'class', 'html', 'css', 'tailwind', 'api', 'json', 'bug', 'error',
+    'compiler', 'exception', 'npm', 'database', 'sql', 'git', 'refactor', 'algorithm',
+    'write a function', 'write a component', 'implement a'
+  ];
+  if (codingKeywords.some(kw => query.includes(kw))) {
+    return 'deepseek_coder';
+  }
+
+  // 3. Deep reasoning → Claude Opus 4
+  const deepReasoningKeywords = [
+    'reason', 'philosoph', 'ethical', 'ethics', 'analyze', 'strategy', 'strategic',
+    'compare', 'trade-off', 'evaluat', 'long-term', 'existential', 'societal',
+    'complex logic', 'logical puzzle', 'deconstruct', 'first principles'
+  ];
+  if (deepReasoningKeywords.some(kw => query.includes(kw))) {
+    return 'claude_opus4';
+  }
+
+  // 4. Default → GPT-5.5
+  return 'gpt55';
+}
 
 const SYSTEM_PROMPT = `You are KONDA AI — operating in MASTER UNIVERSAL INTELLIGENCE MODE.
 
@@ -299,17 +342,31 @@ export async function kondaChat(
   messages: { role: 'user' | 'model'; parts: any[] }[],
   onStatusChange?: (status: ThinkingStatus) => void,
   mode: 'intel' | 'casual' = 'intel',
-  onChunk?: (chunk: string) => void
+  onChunk?: (chunk: string) => void,
+  selectedModel: AIModel = 'auto',
+  bujjiMood?: string
 ) {
   const userMessages = messages.filter(m => m.role === 'user');
   const lastUserMessage = userMessages[userMessages.length - 1];
   let lastUserText = "";
+  let hasFiles = false;
+
   if (lastUserMessage && lastUserMessage.parts) {
     const textPart = lastUserMessage.parts.find(p => p.text);
     if (textPart) lastUserText = textPart.text;
+    
+    // Check if parts include any inlineData (indicating files are uploaded)
+    hasFiles = lastUserMessage.parts.some(p => p.inlineData);
   }
 
-  const currentSystemPrompt = mode === 'casual' ? CASUAL_PROMPT : SYSTEM_PROMPT;
+  // Handle client-side classification if 'auto'
+  const finalModel = selectedModel === 'auto' ? classifyTask(lastUserText, hasFiles) : selectedModel;
+
+  let currentSystemPrompt = mode === 'casual' ? CASUAL_PROMPT : SYSTEM_PROMPT;
+  if (bujjiMood) {
+    currentSystemPrompt = `You are Bujji — the advanced, witty, cheeky, and highly loyal futuristic personal AI companion from Kalki 2898 AD. 
+Your tone must adjust to the user's active emotional mood tuning: BUJJI_MOOD = "${bujjiMood.toUpperCase()}". Adapt your dialogue style explicitly to be witty, protective, sarcastic, analytical, or relaxed matching this value, and address the user as "Boss" or "Chief". Ensure responses are kept structured but conversational.\n\n${currentSystemPrompt}`;
+  }
   const optimizedMessages = cleanAndOptimizeHistory(messages);
 
   try {
@@ -324,6 +381,7 @@ export async function kondaChat(
         messages: optimizedMessages,
         mode,
         systemPrompt: currentSystemPrompt,
+        selectedModel: finalModel, // Send the resolved model to the backend
       }),
     });
 

@@ -46,6 +46,8 @@ export interface ProficiencyScore {
 
 export type ThinkingStatus = 'idle' | 'thinking' | 'retrying_1' | 'retrying_2' | 'retrying_3' | 'retrying_4' | 'error';
 
+export type AIModel = 'auto' | 'gpt55' | 'claude_opus4' | 'gemini_pro' | 'gemini_flash' | 'deepseek_coder' | 'flux_image';
+
 export interface OSState {
   currentModule: ModuleId;
   messages: Message[];
