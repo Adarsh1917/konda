@@ -33,7 +33,7 @@ export default function KosmosModule({ onSendMessage, messages, isThinking, thin
       math: ['math', 'calc', 'integral', 'derivative', 'solve for', 'equation', 'matrix', 'tensor', 'probability', 'statistics'],
       engineering: ['code', 'engineer', 'system', 'build', 'optimization', 'architecture', 'dev', 'programming', 'software'],
       creative: ['art', 'draw', 'creative', 'design', 'palette', 'color', 'sketch', 'illustration', 'visual'],
-      polyglot: ['translate', 'language', 'french', 'chinese', 'spanish', 'linguistic', 'grammar', 'vocab'],
+      language: ['translate', 'language', 'french', 'chinese', 'spanish', 'linguistic', 'grammar', 'vocab'],
       memory: ['history', 'save', 'archive', 'backup', 'session', 'recall', 'data bank']
     };
 
@@ -49,122 +49,133 @@ export default function KosmosModule({ onSendMessage, messages, isThinking, thin
   };
 
   return (
-    <div className="h-full flex flex-col bg-[#212121] relative overflow-hidden text-[#ececec]">
-      {/* Decorative Background - subtle for ChatGPT feel */}
-      <div className="absolute inset-0 pointer-events-none opacity-20">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-white/5 rounded-full blur-[120px]" />
+    <div className="h-full flex flex-col bg-[#050505] relative overflow-hidden">
+      {/* Decorative Background */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#FF3E00]/5 rounded-full blur-[120px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-white/5 rounded-full blur-[120px]" />
       </div>
 
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-white/5 bg-[#212121]/80 backdrop-blur-md z-10">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-[#3d3d3d] rounded-lg flex items-center justify-center">
-            <Bot className="w-5 h-5 text-[#ececec]" />
+      <div className="flex items-center justify-between p-8 border-b border-white/5 bg-black/20 backdrop-blur-md z-10">
+        <div className="flex flex-col gap-1">
+          <div className="text-[10px] tracking-[0.4em] uppercase font-bold text-[#FF3E00]">
+            Casual_Interface_v1
           </div>
-          <div className="flex flex-col">
-            <h1 className="text-sm font-semibold tracking-tight">Kosmos Core</h1>
-            <div className="text-[10px] text-white/40">Casual Intelligence v1.2</div>
-          </div>
+          <h1 className="text-2xl font-light tracking-tighter text-[#F5F5F5]">
+            Casual <span className="italic font-serif opacity-40">Intelligence</span>
+          </h1>
         </div>
-        <div className="flex items-center gap-2">
-           <div className="w-2 h-2 rounded-full bg-green-500/50 animate-pulse" />
-           <span className="text-[10px] font-mono text-white/20 uppercase tracking-widest">Uplink Stable</span>
+        <div className="flex items-center gap-4">
+          <div className="flex flex-col items-end">
+            <div className="text-[8px] uppercase tracking-widest opacity-20">Uplink</div>
+            <div className="text-[9px] text-[#FF3E00] font-mono">STABLE</div>
+          </div>
+          <div className="w-10 h-10 border border-white/10 rounded-full flex items-center justify-center">
+            <Sparkles className="w-4 h-4 text-[#FF3E00]" />
+          </div>
         </div>
       </div>
 
       {/* Messages */}
       <div 
         ref={scrollRef}
-        className="flex-1 overflow-y-auto custom-scrollbar relative z-10"
+        className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar relative z-10"
       >
-        <div className="max-w-2xl mx-auto py-12 px-6 space-y-10">
-          {messages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center py-20">
-              <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-6">
-                  <Sparkles className="w-8 h-8 text-white/20" />
-              </div>
-              <h2 className="text-2xl font-semibold mb-2">How can I help you today?</h2>
-              <p className="text-sm text-white/40 max-w-sm mx-auto leading-relaxed">
-                I'm your casual companion for quick queries, translations, or just a bit of light conversation.
+        {messages.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-center space-y-6">
+            <div className="w-20 h-20 bg-white/5 rounded-2xl flex items-center justify-center transform rotate-12 mb-4">
+                <Bot className="w-10 h-10 text-white/20" />
+            </div>
+            <div className="max-w-md space-y-2">
+              <h2 className="text-xl font-light text-white/80">Greetings, User.</h2>
+              <p className="text-sm text-white/40 leading-relaxed font-light">
+                I am your Casual companion. I handle the quick, the curious, and the conversational. How shall we spend our clock cycles today?
               </p>
             </div>
-          ) : (
-            messages.map((msg) => (
-              <motion.div 
-                key={msg.id}
-                initial={{ opacity: 0, y: 5 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={cn(
-                  "flex gap-4",
-                  msg.role === 'user' ? "flex-row-reverse" : "flex-row"
-                )}
-              >
-                <div className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5",
-                  msg.role === 'user' ? "bg-white/10 text-white" : "bg-[#3d3d3d] text-[#ececec]"
-                )}>
-                  {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
-                </div>
-                <div className={cn(
-                  "max-w-[85%] px-4 py-2 rounded-2xl text-[15px] leading-relaxed",
-                  msg.role === 'user' 
-                    ? "bg-[#2f2f2f] text-white" 
-                    : "bg-transparent text-[#d1d1d1]"
-                )}>
-                  {msg.content}
-                </div>
-              </motion.div>
-            ))
-          )}
-          
-          {isThinking && (
-            <div className="flex gap-4 flex-row animate-pulse">
-              <div className="w-8 h-8 rounded-full bg-[#3d3d3d] flex items-center justify-center shrink-0 mt-0.5">
-                 <Bot className="w-4 h-4 text-[#ececec]" />
+          </div>
+        ) : (
+          messages.map((msg, index) => (
+            <motion.div 
+              key={`${msg.id}-${index}`}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={cn(
+                "flex gap-4 max-w-3xl",
+                msg.role === 'user' ? "ml-auto flex-row-reverse text-right" : "mr-auto text-left"
+              )}
+            >
+              <div className={cn(
+                "w-8 h-8 rounded-full border flex items-center justify-center shrink-0 mt-1",
+                msg.role === 'user' ? "border-white/10 bg-white/5" : "border-[#FF3E00]/20 bg-[#FF3E00]/5"
+              )}>
+                {msg.role === 'user' ? <User className="w-3.5 h-3.5 text-white/40" /> : <Bot className="w-3.5 h-3.5 text-[#FF3E00]" />}
               </div>
-              <div className="flex gap-1.5 items-center px-4 py-2">
-                <div className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <div className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '200ms' }} />
-                <div className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '400ms' }} />
+              <div className={cn(
+                "p-5 rounded-2xl text-sm leading-relaxed",
+                msg.role === 'user' 
+                  ? "bg-white/[0.03] border border-white/5 text-white/80 rounded-tr-none" 
+                  : "bg-white/[0.01] border border-white/5 text-white/60 rounded-tl-none font-serif italic"
+              )}>
+                {msg.content}
+              </div>
+            </motion.div>
+          ))
+        )}
+        
+        {isThinking && (
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-4 mr-auto animate-pulse">
+              <div className={cn(
+                "w-8 h-8 rounded-full border flex items-center justify-center shrink-0",
+                thinkingStatus.startsWith('retrying') ? "border-yellow-500/20 bg-yellow-500/5" : "border-[#FF3E00]/20 bg-[#FF3E00]/5"
+              )}>
+                <Bot className={cn("w-3.5 h-3.5", thinkingStatus.startsWith('retrying') ? "text-yellow-500" : "text-[#FF3E00]")} />
+              </div>
+              <div className="flex gap-1 items-center px-4 py-2">
+                <div className={cn("w-1 h-1 rounded-full animate-bounce", thinkingStatus.startsWith('retrying') ? "bg-yellow-500" : "bg-[#FF3E00]")} style={{ animationDelay: '0ms' }} />
+                <div className={cn("w-1 h-1 rounded-full animate-bounce", thinkingStatus.startsWith('retrying') ? "bg-yellow-500" : "bg-[#FF3E00]")} style={{ animationDelay: '200ms' }} />
+                <div className={cn("w-1 h-1 rounded-full animate-bounce", thinkingStatus.startsWith('retrying') ? "bg-yellow-500" : "bg-[#FF3E00]")} style={{ animationDelay: '400ms' }} />
               </div>
             </div>
-          )}
-        </div>
+            {thinkingStatus.startsWith('retrying') && (
+              <div className="ml-12 text-[10px] font-mono text-yellow-500/60 uppercase tracking-widest animate-pulse">
+                {thinkingStatus === 'retrying_1' ? "Neural Load High: Retrying (Attempt 1)..." :
+                 thinkingStatus === 'retrying_2' ? "Saturated Path: Switching to Primary Link (Attempt 2)..." :
+                 thinkingStatus === 'retrying_3' ? "Congestion Detected: Buffering (Attempt 3)..." :
+                 "Maximum Saturation: Final Attempt..."}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Input */}
-      <div className="pb-6 pt-1 px-6 z-10">
-        <div className="max-w-2xl mx-auto">
-          <form 
-            onSubmit={handleSubmit}
-            className="relative group bg-[#2f2f2f] rounded-3xl border border-white/5 focus-within:border-white/10 transition-all shadow-xl"
+      <div className="p-8 bg-black/40 border-t border-white/5 z-10">
+        <form 
+          onSubmit={handleSubmit}
+          className="max-w-4xl mx-auto relative group"
+        >
+          <input 
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            disabled={isThinking}
+            placeholder="Type your casual query..."
+            className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-8 pr-16 text-sm focus:outline-none focus:border-[#FF3E00]/30 transition-all placeholder:opacity-20"
+          />
+          <button 
+            type="submit"
+            disabled={!input.trim() || isThinking}
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 bg-[#FF3E00] text-black rounded-lg flex items-center justify-center hover:bg-[#FF3E00]/80 transition-all disabled:opacity-20 disabled:grayscale"
           >
-            <input 
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              disabled={isThinking}
-              placeholder="Message Kosmos..."
-              className="w-full bg-transparent py-2.5 pl-6 pr-14 text-[15px] focus:outline-none placeholder:text-white/20"
-            />
-            <button 
-              type="submit"
-              disabled={!input.trim() || isThinking}
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-white text-black rounded-full flex items-center justify-center hover:bg-white/90 transition-all disabled:opacity-20 flex-shrink-0"
-            >
-              <ArrowRight className="w-5 h-5" />
-            </button>
-          </form>
-          
-          <div className="mt-4 flex justify-center gap-6 overflow-x-auto no-scrollbar py-1">
-             <QuickAction icon={Zap} label="Equation" onClick={() => onSwitchModule('math')} />
-             <QuickAction icon={MessageCircle} label="Translate" onClick={() => onSwitchModule('polyglot')} />
-             <QuickAction icon={Sparkles} label="Design" onClick={() => onSwitchModule('creative')} />
-          </div>
-          
-          <p className="mt-4 text-[10px] text-center text-white/20 uppercase tracking-widest font-mono">
-            Kosmos can handle casual talk or route you to specialized intel reactors
-          </p>
+            <Send className="w-4 h-4" />
+          </button>
+        </form>
+        <div className="mt-4 flex justify-center gap-6">
+           <QuickAction icon={Zap} label="Math" onClick={() => onSwitchModule('math')} />
+           <QuickAction icon={MessageCircle} label="Language" onClick={() => onSwitchModule('language')} />
+           <QuickAction icon={Sparkles} label="Creative" onClick={() => onSwitchModule('creative')} />
         </div>
       </div>
     </div>

@@ -9,12 +9,30 @@
 
 @layer base {
   body {
-    @apply bg-[#0A0A0A] text-[#F5F5F5] font-sans selection:bg-[#00D1FF] selection:text-black;
+    @apply bg-[#0A0A0A] text-[#F5F5F5] font-sans selection:bg-[#FF3E00] selection:text-white;
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
   }
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 62, 0, 0.1);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 62, 0, 0.3);
 }
 
 .animate-spin-slow {
@@ -35,7 +53,7 @@
 }
 
 .markdown-body code {
-  @apply bg-[#1A1A1A] px-1.5 py-0.5 rounded text-[0.85em] font-mono text-[#00D1FF];
+  @apply bg-[#1A1A1A] px-1.5 py-0.5 rounded text-[0.85em] font-mono text-[#FF3E00];
 }
 
 .markdown-body pre {
@@ -52,7 +70,7 @@
 
 .markdown-body h1 { @apply text-2xl tracking-tighter; }
 .markdown-body h2 { @apply text-xl tracking-tight; }
-.markdown-body h3 { @apply text-xs uppercase tracking-[0.3em] font-sans font-bold text-[#00D1FF]/60; }
+.markdown-body h3 { @apply text-xs uppercase tracking-[0.3em] font-sans font-bold text-[#FF3E00]/60; }
 
 .markdown-body ul, .markdown-body ol {
   @apply ml-6 mb-4 space-y-2;
@@ -67,5 +85,5 @@
 }
 
 .markdown-body blockquote {
-  @apply border-l border-[#00D1FF] pl-6 py-1 italic font-serif text-[#F5F5F5]/60;
+  @apply border-l border-[#FF3E00] pl-4 py-1 italic font-serif text-white/50 bg-white/[0.02];
 }

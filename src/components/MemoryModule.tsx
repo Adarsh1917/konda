@@ -278,9 +278,9 @@ export default function MemoryModule({ proficiency }: { proficiency: Proficiency
           <div className="flex-1 space-y-4">
             <AnimatePresence mode="popLayout">
               {filteredSessions.length > 0 ? (
-                filteredSessions.map((session) => (
+                filteredSessions.map((session, index) => (
                   <motion.div
-                    key={session.id}
+                    key={`${session.id}-${index}`}
                     layout
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}

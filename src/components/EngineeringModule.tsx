@@ -5,7 +5,7 @@ import {
   ShieldCheck, Box, ChevronRight, Play, RefreshCcw, Command, AlertCircle, CheckCircle2,
   Maximize, Plus, Trash2 
 } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn, generateId } from '../lib/utils';
 
 export default function EngineeringModule() {
   const [activeTab, setActiveTab] = useState<'architecture' | 'optimization' | 'security' | 'interpreter' | 'strategy'>('architecture');
@@ -215,9 +215,10 @@ export default function EngineeringModule() {
                         <div className="text-[10px] uppercase tracking-widest text-white/40 mb-2">Entropy_Shield</div>
                         <button 
                           onClick={() => {
-                            alert("GOD-LEVEL ENTROPY SHIELD: All random variables stabilized. System baseline reset to First Principles.");
+                            setIsUpdated(true); // Visual feedback
+                            localStorage.setItem('konda_packages_updated', 'true');
                           }}
-                          className="w-full mt-1 py-1 px-2 bg-yellow-500/10 border border-yellow-500/40 text-yellow-500 text-[10px] font-mono uppercase tracking-widest hover:bg-yellow-500 hover:text-black transition-all rounded-sm"
+                          className="w-full mt-1 py-1 px-2 bg-[#FF3E00]/10 border border-[#FF3E00]/40 text-[#FF3E00] text-[10px] font-mono uppercase tracking-widest hover:bg-[#FF3E00] hover:text-white transition-all rounded-sm"
                         >
                           Stabilize_System
                         </button>
@@ -237,28 +238,38 @@ export default function EngineeringModule() {
 function StrategicPrioritization() {
   const [subjects, setSubjects] = useState<{id: string, name: string, importance: number, urgency: number, weightage: number}[]>(() => {
     const saved = localStorage.getItem('konda_subject_matrix');
-    return saved ? JSON.parse(saved) : [
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        // Fallback below
+      }
+    }
+    return [
       { id: '1', name: 'Neural Networks', importance: 90, urgency: 80, weightage: 35 },
       { id: '2', name: 'Systems Design', importance: 85, urgency: 40, weightage: 25 },
       { id: '3', name: 'Legacy Systems', importance: 30, urgency: 95, weightage: 15 },
       { id: '4', name: 'Optional Elective', importance: 10, urgency: 20, weightage: 5 },
     ];
   });
+  const [isAddingTopic, setIsAddingTopic] = useState(false);
+  const [newTopicName, setNewTopicName] = useState('');
 
   useEffect(() => {
     localStorage.setItem('konda_subject_matrix', JSON.stringify(subjects));
   }, [subjects]);
 
   const addSubject = () => {
-    const name = prompt('Enter subject/exam topic:');
-    if (name) {
+    if (newTopicName.trim()) {
       setSubjects([...subjects, { 
-        id: Date.now().toString(), 
-        name, 
+        id: generateId(), 
+        name: newTopicName.trim(), 
         importance: 50, 
         urgency: 50,
         weightage: 10
       }]);
+      setNewTopicName('');
+      setIsAddingTopic(false);
     }
   };
 
@@ -266,18 +277,40 @@ function StrategicPrioritization() {
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-center bg-[#FF3E00]/5 border border-[#FF3E00]/20 p-4 rounded">
-        <div>
-          <h3 className="text-xl font-bold mb-1 uppercase tracking-tighter italic">Neural_Cortex_V12</h3>
-          <p className="text-[10px] text-[#FF3E00] uppercase tracking-[0.2em] font-mono animate-pulse">Mode: TOTAL_SYSTEM_EVOLUTION_ACTIVE</p>
+      <div className="flex flex-col gap-4 bg-[#FF3E00]/5 border border-[#FF3E00]/20 p-6 rounded">
+        <div className="flex justify-between items-center">
+          <div>
+            <h3 className="text-xl font-bold mb-1 uppercase tracking-tighter italic">Neural_Cortex_V12</h3>
+            <p className="text-[10px] text-[#FF3E00] uppercase tracking-[0.2em] font-mono animate-pulse">Mode: TOTAL_SYSTEM_EVOLUTION_ACTIVE</p>
+          </div>
+          <button 
+            onClick={() => setIsAddingTopic(!isAddingTopic)}
+            className="px-6 py-2 bg-[#FF3E00]/10 border border-[#FF3E00]/40 rounded-sm flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest hover:bg-[#FF3E00] hover:text-white transition-all text-[#FF3E00]"
+          >
+            <Plus className={cn("w-3 h-3 transition-transform", isAddingTopic && "rotate-45")} />
+            {isAddingTopic ? 'Cancel_Index' : 'Index_New_Topic'}
+          </button>
         </div>
-        <button 
-          onClick={addSubject}
-          className="px-6 py-2 bg-[#FF3E00]/10 border border-[#FF3E00]/40 rounded-sm flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest hover:bg-[#FF3E00] hover:text-white transition-all text-[#FF3E00]"
-        >
-          <Plus className="w-3 h-3" />
-          Index_New_Topic
-        </button>
+
+        {isAddingTopic && (
+          <div className="flex gap-2 animate-in slide-in-from-top-2 duration-300">
+            <input 
+              autoFocus
+              type="text"
+              value={newTopicName}
+              onChange={(e) => setNewTopicName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addSubject()}
+              placeholder="Enter subject/exam topic..."
+              className="flex-1 bg-black/40 border border-white/10 rounded px-4 py-2 text-xs font-mono text-white/80 focus:outline-none focus:border-[#FF3E00]/40"
+            />
+            <button 
+              onClick={addSubject}
+              className="px-6 py-2 bg-[#FF3E00] text-black font-bold rounded-sm text-[10px] font-mono uppercase tracking-widest"
+            >
+              Confirm
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
@@ -341,7 +374,7 @@ function StrategicPrioritization() {
             <span className="text-[10px] font-mono text-white/20 tracking-tighter">COGNITIVE_LOAD: {totalWeight.toFixed(1)}/100.0</span>
           </div>
           <div className="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
-            {subjects.sort((a, b) => (b.weightage) - (a.weightage)).map(sub => {
+            {[...subjects].sort((a, b) => (b.weightage) - (a.weightage)).map(sub => {
               const mpm = (sub.weightage / (101 - sub.importance));
               return (
                 <div key={sub.id} className="p-4 bg-[#0A0A0A] border border-white/5 rounded-lg space-y-4 group transition-all hover:border-[#FF3E00]/20">
@@ -405,9 +438,9 @@ function StrategicPrioritization() {
              </div>
              <p className="text-xs text-white/60 leading-relaxed font-mono tracking-tight">
                 {subjects.length > 5 ? (
-                  `[CRITICAL] Your cognitive pipeline is overloaded (${subjects.length} topics). RECOMMENDATION: IMMEDIATELY DROP ${subjects.sort((a,b) => (a.weightage / (101 - a.importance)) - (b.weightage / (101 - b.importance)))[0]?.name} To clear bandwidth for high-MPM topics.`
+                  `[CRITICAL] Your cognitive pipeline is overloaded (${subjects.length} topics). RECOMMENDATION: IMMEDIATELY DROP ${[...subjects].sort((a,b) => (a.weightage / (101 - a.importance)) - (b.weightage / (101 - b.importance)))[0]?.name} To clear bandwidth for high-MPM topics.`
                 ) : subjects.length > 0 ? (
-                  `[STATUS] Tactical balance achieved. Prioritize ${subjects.sort((a,b) => (b.weightage / (101 - b.importance)) - (a.weightage / (101 - a.importance)))[0]?.name} using 15-min micro-loops. Skip complex derivations—focus on results.`
+                  `[STATUS] Tactical balance achieved. Prioritize ${[...subjects].sort((a,b) => (b.weightage / (101 - b.importance)) - (a.weightage / (101 - a.importance)))[0]?.name} using 15-min micro-loops. Skip complex derivations—focus on results.`
                 ) : (
                    "[SIGNAL_LOST] Awaiting neural index of exam topics..."
                 )}
@@ -416,7 +449,7 @@ function StrategicPrioritization() {
                 <div className="mt-4 pt-4 border-t border-white/5 grid grid-cols-2 gap-4">
                    <div className="space-y-1">
                       <div className="text-[8px] uppercase text-white/20 font-mono">Current_Focus</div>
-                      <div className="text-[10px] text-white/90 truncate">{subjects.sort((a,b) => b.weightage - a.weightage)[0]?.name}</div>
+                      <div className="text-[10px] text-white/90 truncate">{[...subjects].sort((a,b) => b.weightage - a.weightage)[0]?.name}</div>
                    </div>
                    <div className="space-y-1 text-right">
                       <div className="text-[8px] uppercase text-white/20 font-mono">Next_Action</div>

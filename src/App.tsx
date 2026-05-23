@@ -12,6 +12,7 @@ import { useShortcuts } from './hooks/useShortcuts';
 import { useAdaptiveLearning } from './hooks/useAdaptiveLearning';
 import { ModuleId, OSState, Message, Shortcut, ProficiencyScore, ThinkingStatus } from './types';
 import { kondaChat } from './services/kondaService';
+import { generateId, cn } from './lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { Cpu, Power, Menu, X, Terminal, Share2, Check, Keyboard, Zap } from 'lucide-react';
 
@@ -19,7 +20,7 @@ export default function App() {
   const { proficiency, updateProficiency, getRecommendations } = useAdaptiveLearning();
   const [state, setState] = useState<OSState>(() => {
     return {
-      currentModule: 'kosmos',
+      currentModule: 'casual',
       messages: [],
       memory: {},
       thinkingStatus: 'idle',
@@ -52,7 +53,7 @@ export default function App() {
           const archivedSaved = localStorage.getItem('konda_history');
           const history = archivedSaved ? JSON.parse(archivedSaved) : [];
           const newArchive = {
-            id: Date.now().toString(),
+            id: generateId(),
             title: `Auto-Archived Session ${new Date().toLocaleString()}`,
             messages: messages,
             timestamp: Date.now()
@@ -98,10 +99,23 @@ export default function App() {
       window.removeEventListener('module-change', handleModuleChange);
     };
   }, []);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth > 768;
+    }
+    return true;
+  });
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [showShareToast, setShowShareToast] = useState(false);
   const [isShortcutManagerOpen, setIsShortcutManagerOpen] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
@@ -121,7 +135,7 @@ export default function App() {
       const archivedSaved = localStorage.getItem('konda_history');
       const history = archivedSaved ? JSON.parse(archivedSaved) : [];
       const newArchive = {
-        id: Date.now().toString(),
+        id: generateId(),
         title: `Manual Session Archive ${new Date().toLocaleString()}`,
         messages: state.messages,
         timestamp: Date.now()
@@ -154,11 +168,11 @@ export default function App() {
       action: () => setIsSidebarOpen(s => !s)
     },
     {
-      id: 'switch-kosmos',
-      label: 'Switch to Kosmos Core',
+      id: 'switch-casual',
+      label: 'Switch to Casual Module',
       key: '0',
       altKey: true,
-      action: () => handleModuleChange('kosmos')
+      action: () => handleModuleChange('casual')
     },
     {
       id: 'switch-command',
@@ -175,11 +189,11 @@ export default function App() {
       action: () => handleModuleChange('math')
     },
     {
-      id: 'switch-polyglot',
-      label: 'Switch to Polyglot Module',
+      id: 'switch-language',
+      label: 'Switch to Language Module',
       key: '3',
       altKey: true,
-      action: () => handleModuleChange('polyglot')
+      action: () => handleModuleChange('language')
     },
     {
       id: 'show-shortcuts',
@@ -222,7 +236,7 @@ export default function App() {
     }
 
     const userMessage: Message = {
-      id: Date.now().toString(),
+      id: generateId(),
       role: 'user',
       content,
       timestamp: Date.now()
@@ -239,13 +253,13 @@ export default function App() {
       parts: [{ text: m.content }]
     }));
 
-    const mode = state.currentModule === 'kosmos' ? 'casual' : 'intel';
+    const mode = state.currentModule === 'casual' ? 'casual' : 'intel';
     const response = await kondaChat(chatHistory, (status) => {
       setState(s => ({ ...s, thinkingStatus: status }));
     }, mode);
 
     const assistantMessage: Message = {
-      id: (Date.now() + 1).toString(),
+      id: generateId(),
       role: 'assistant',
       content: response,
       timestamp: Date.now()
@@ -265,20 +279,25 @@ export default function App() {
       <div className="absolute top-[-200px] left-[-200px] w-[600px] h-[600px] border border-white/5 rounded-full pointer-events-none z-0" />
       <div className="absolute top-[-100px] left-[-100px] w-[400px] h-[400px] border border-[#FF3E00]/10 rounded-full pointer-events-none z-0" />
 
-      {/* Sidebar - Persistent on desktop, Toggle on mobile */}
-      <AnimatePresence>
+      {/* Sidebar - Collapsible on both desktop and mobile */}
+      <AnimatePresence initial={false}>
         {(isSidebarOpen || !isMobile) && (
           <motion.div
-            initial={{ x: -260 }}
-            animate={{ x: 0 }}
-            exit={{ x: -260 }}
+            initial={isMobile ? { x: -260 } : { width: 0, opacity: 0 }}
+            animate={isMobile ? { x: isSidebarOpen ? 0 : -260 } : { width: isSidebarOpen ? 256 : 0, opacity: isSidebarOpen ? 1 : 0 }}
+            exit={isMobile ? { x: -260 } : { width: 0, opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed inset-y-0 left-0 z-50 md:relative md:translate-x-0"
+            className={cn(
+              "h-full z-50 shrink-0 overflow-hidden",
+              isMobile ? "fixed inset-y-0 left-0 bg-[#050505] shadow-2xl w-64" : "relative bg-[#050505]"
+            )}
           >
-            <Sidebar 
-              currentModule={state.currentModule} 
-              onModuleChange={handleModuleChange} 
-            />
+            <div className="w-64 h-full">
+              <Sidebar 
+                currentModule={state.currentModule} 
+                onModuleChange={handleModuleChange} 
+              />
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -298,46 +317,47 @@ export default function App() {
       <main className="flex-1 flex flex-col min-w-0 relative z-10">
         
         {/* Title Bar / Header */}
-        <header className="h-20 md:h-24 flex items-center md:items-start justify-between px-6 md:px-10 pt-0 md:pt-8 bg-transparent shrink-0">
+        <header className="h-14 md:h-16 flex items-center justify-between px-6 md:px-8 border-b border-white/[0.04] bg-black/10 backdrop-blur-md shrink-0 relative z-20">
           <div className="flex items-center gap-4">
             <button 
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="md:hidden p-2 text-[#00D1FF]"
+              className="p-2 text-white/40 hover:text-[#FF3E00] hover:bg-white/5 rounded-lg transition-colors cursor-pointer"
+              title="Toggle Sidebar"
             >
-              {isSidebarOpen ? <X /> : <Menu />}
+              {isSidebarOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
             </button>
             <div className="flex flex-col">
-              <div className="text-[10px] tracking-[0.3em] uppercase font-bold text-[#FF3E00] mb-0.5 md:mb-1">
+              <div className="text-[9px] tracking-[0.25em] uppercase font-bold text-[#FF3E00] leading-none mb-0.5">
                 Active Protocol
               </div>
-              <div className="text-lg md:text-2xl font-light tracking-tighter uppercase flex items-center gap-2">
+              <div className="text-sm md:text-base font-light tracking-tight uppercase flex items-center gap-1.5 leading-none">
                 {state.currentModule} 
-                <span className="hidden sm:inline-block opacity-20 font-serif italic font-normal normal-case ml-2 text-base md:text-lg">Sequence_Omega</span>
+                <span className="hidden sm:inline-block opacity-20 font-serif italic font-normal normal-case ml-2 text-xs">Sequence_Omega</span>
               </div>
             </div>
           </div>
 
-          <div className="flex space-x-12 items-baseline">
+          <div className="flex space-x-8 items-center">
             <div className="text-right hidden md:block">
-              <div className="text-[9px] tracking-[0.2em] uppercase opacity-40 mb-1">Temporal Registry</div>
-              <div className="text-xs font-mono">{new Date().toLocaleTimeString('en-US', { hour12: false })} GMT</div>
+              <div className="text-[8px] tracking-[0.15em] uppercase opacity-30 mb-0.5">Temporal Registry</div>
+              <div className="text-[10px] font-mono text-white/50 leading-none">{currentTime.toLocaleTimeString('en-US', { hour12: false })} GMT</div>
             </div>
             <div className="text-right hidden md:block">
-              <div className="text-[9px] tracking-[0.2em] uppercase opacity-40 mb-1">Cortex Integrity</div>
-              <div className="text-xs font-mono text-[#FF3E00]">MAX_INTEL</div>
+              <div className="text-[8px] tracking-[0.15em] uppercase opacity-30 mb-0.5">Cortex Integrity</div>
+              <div className="text-[10px] font-mono text-[#FF3E00]/80 leading-none">MAX_INTEL</div>
             </div>
             
             <div className="flex gap-2">
               <button 
                 onClick={() => setIsShortcutManagerOpen(true)}
-                className="w-10 h-10 border border-[#333] rounded-full flex items-center justify-center text-[10px] hover:border-[#FF3E00] cursor-pointer transition-all hover:text-[#FF3E00] group relative"
+                className="w-8 h-8 border border-[#333] rounded-full flex items-center justify-center text-[10px] hover:border-[#FF3E00] cursor-pointer transition-all hover:text-[#FF3E00] group relative"
                 title="Shortcuts (Shift + ?)"
               >
                 <Keyboard className="w-3 h-3 group-hover:scale-110 transition-transform" />
               </button>
               <button 
                 onClick={handleShare}
-                className="w-10 h-10 border border-[#333] rounded-full flex items-center justify-center text-[10px] hover:border-[#FF3E00] cursor-pointer transition-all hover:text-[#FF3E00] group relative"
+                className="w-8 h-8 border border-[#333] rounded-full flex items-center justify-center text-[10px] hover:border-[#FF3E00] cursor-pointer transition-all hover:text-[#FF3E00] group relative"
               >
                 {showShareToast ? <Check className="w-3 h-3 text-[#FF3E00]" /> : <Share2 className="w-3 h-3 group-hover:scale-110 transition-transform" />}
                 <AnimatePresence>
@@ -346,14 +366,14 @@ export default function App() {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
-                      className="absolute top-12 right-0 whitespace-nowrap bg-[#FF3E00] text-white text-[8px] font-bold py-1 px-2 rounded-sm tracking-widest"
+                      className="absolute top-10 right-0 whitespace-nowrap bg-[#FF3E00] text-white text-[8px] font-bold py-1 px-2 rounded-sm tracking-widest z-[70]"
                     >
                       LINK COPIED
                     </motion.div>
                   )}
                 </AnimatePresence>
               </button>
-              <div className="w-10 h-10 border border-[#333] rounded-full flex items-center justify-center text-[10px] hover:border-[#FF3E00] cursor-pointer transition-all hover:text-[#FF3E00] group">
+              <div className="w-8 h-8 border border-[#333] rounded-full flex items-center justify-center text-[10px] hover:border-[#FF3E00] cursor-pointer transition-all hover:text-[#FF3E00] group">
                 <Power className="w-3 h-3 group-hover:scale-110 transition-transform" />
               </div>
             </div>
@@ -421,13 +441,13 @@ function ModuleSelector({ moduleId, messages, onSendMessage, onClearChat, onArch
 }) {
   const isThinking = thinkingStatus !== 'idle';
   switch (moduleId) {
-    case 'kosmos':
+    case 'casual':
       return <KosmosModule messages={messages} onSendMessage={onSendMessage} isThinking={isThinking} thinkingStatus={thinkingStatus} onSwitchModule={onSwitchModule} />;
     case 'command':
       return <CommandCenter messages={messages} onSendMessage={onSendMessage} onClearChat={onClearChat} onArchiveChat={onArchiveChat} isThinking={isThinking} thinkingStatus={thinkingStatus} recommendations={recommendations} />;
     case 'math':
       return <MathModule />;
-    case 'polyglot':
+    case 'language':
       return <PolyglotModule />;
     case 'creative':
       return <CreativeModule />;

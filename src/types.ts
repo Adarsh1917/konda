@@ -1,4 +1,4 @@
-export type ModuleId = 'command' | 'math' | 'polyglot' | 'creative' | 'engineering' | 'memory' | 'kosmos';
+export type ModuleId = 'command' | 'math' | 'language' | 'creative' | 'engineering' | 'memory' | 'casual';
 
 export interface Message {
   id: string;

@@ -8,7 +8,7 @@ export function useAdaptiveLearning() {
       { id: 'math-calc', moduleId: 'math', subject: 'Calculus', level: 45, lastInteraction: Date.now(), weakPoints: ['Integration by Parts', 'Limits'] },
       { id: 'math-prob', moduleId: 'math', subject: 'Probability', level: 78, lastInteraction: Date.now(), weakPoints: ['Bayesian Inference'] },
       { id: 'eng-sys', moduleId: 'engineering', subject: 'Systems', level: 62, lastInteraction: Date.now(), weakPoints: ['Concurrency Control'] },
-      { id: 'poly-ling', moduleId: 'polyglot', subject: 'Linguistics', level: 30, lastInteraction: Date.now(), weakPoints: ['Semantic Drift'] }
+      { id: 'poly-ling', moduleId: 'language', subject: 'Linguistics', level: 30, lastInteraction: Date.now(), weakPoints: ['Semantic Drift'] }
     ];
   });
 

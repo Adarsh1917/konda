@@ -47,9 +47,9 @@ export default function ShortcutManager({ isOpen, onClose, shortcuts }: Shortcut
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-2">
-              {shortcuts.map((shortcut) => (
+              {shortcuts.map((shortcut, index) => (
                 <div 
-                  key={shortcut.id}
+                  key={`${shortcut.id}-${index}`}
                   className="group flex items-center justify-between p-4 bg-white/[0.02] border border-white/5 hover:border-[#FF3E00]/30 transition-all rounded-lg"
                 >
                   <div className="flex items-center gap-4">

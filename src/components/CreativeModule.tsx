@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Layers, Box, Maximize, Palette, Sparkles, Image as ImageIcon, Download, Copy, Loader2, Send } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { Layers, Box, Maximize, Palette, Sparkles, Image as ImageIcon, Download, Copy, Loader2, Send, Upload, Wand2 } from 'lucide-react';
+import { cn, generateId } from '../lib/utils';
 
 interface Asset {
   id: string;
@@ -14,15 +14,19 @@ export default function CreativeModule() {
   const [prompt, setPrompt] = useState('');
   const [negativePrompt, setNegativePrompt] = useState('');
   const [aspectRatio, setAspectRatio] = useState('1:1');
-  const [stylePreset, setStylePreset] = useState('Photorealistic');
+  const [stylePreset, setStylePreset] = useState('Realistic');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [activeTab, setActiveTab] = useState<'synthesis' | 'edit'>('synthesis');
+  const [editImage, setEditImage] = useState<string | null>(null);
+  
   const [assets, setAssets] = useState<Asset[]>(() => {
     const saved = localStorage.getItem('konda_creative_assets');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       } catch (e) {
-        return [];
+        // Fallback
       }
     }
     return [
@@ -34,13 +38,28 @@ export default function CreativeModule() {
       }
     ];
   });
-  const [activeAsset, setActiveAsset] = useState<Asset>(assets[0]);
+  const [activeAsset, setActiveAsset] = useState<Asset>(assets[0] || {
+    id: 'placeholder',
+    url: '',
+    prompt: 'Awaiting first manifestation...',
+    timestamp: '00:00:00'
+  });
+
+  const createdUrls = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     localStorage.setItem('konda_creative_assets', JSON.stringify(assets));
   }, [assets]);
+
+  useEffect(() => {
+    return () => {
+      // Cleanup blob URLs on unmount
+      createdUrls.current.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, []);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const importInputRef = React.useRef<HTMLInputElement>(null);
+  const editInputRef = React.useRef<HTMLInputElement>(null);
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,43 +70,59 @@ export default function CreativeModule() {
     setTimeout(() => {
       const now = new Date();
       const newAsset: Asset = {
-        id: Date.now().toString(),
+        id: generateId(),
         url: `https://images.unsplash.com/photo-${1600000000000 + Math.floor(Math.random() * 100000000)}?auto=format&fit=crop&w=800&q=80`,
-        prompt: `${stylePreset}: ${prompt}${negativePrompt ? ` [Negative: ${negativePrompt}]` : ''} (${aspectRatio})`,
+        prompt: activeTab === 'edit' 
+          ? `Modified: ${prompt} (Based on uploaded blueprint)` 
+          : `${stylePreset}: ${prompt}${negativePrompt ? ` [Negative: ${negativePrompt}]` : ''} (${aspectRatio})`,
         timestamp: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
       };
       setAssets(prev => [newAsset, ...prev]);
       setActiveAsset(newAsset);
       setPrompt('');
-      setNegativePrompt('');
+      if (activeTab === 'synthesis') setNegativePrompt('');
       setIsGenerating(false);
+      if (activeTab === 'edit') setEditImage(null);
     }, 2500);
   };
 
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>, forEdit: boolean = false) => {
     const file = e.target.files?.[0];
     if (file) {
-      const now = new Date();
-      const newAsset: Asset = {
-        id: Date.now().toString(),
-        url: URL.createObjectURL(file),
-        prompt: `Imported Asset: ${file.name}`,
-        timestamp: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-      };
-      setAssets(prev => [newAsset, ...prev]);
-      setActiveAsset(newAsset);
+      const url = URL.createObjectURL(file);
+      createdUrls.current.add(url);
+      if (forEdit) {
+        setEditImage(url);
+      } else {
+        const now = new Date();
+        const newAsset: Asset = {
+          id: generateId(),
+          url: url,
+          prompt: `Imported Asset: ${file.name}`,
+          timestamp: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        };
+        setAssets(prev => [newAsset, ...prev]);
+        setActiveAsset(newAsset);
+      }
     }
   };
 
-  const stylePresets = ['Photorealistic', 'Anime', 'Cyberpunk', 'Cinematic', 'Minimalist', 'Noir'];
-  const ratios = ['1:1', '16:9', '9:16', '4:5', '3:2'];
+  const stylePresets = ['Realistic', 'Cinematic', 'Anime', 'Illustration', 'Cyberpunk', 'Minimalist'];
+  const ratios = ['1:1', '16:9', '9:16', '4:3', '3:4'];
 
   return (
     <div className="h-full bg-transparent p-6 sm:p-10 overflow-y-auto custom-scrollbar">
       <input 
         type="file" 
         ref={importInputRef} 
-        onChange={handleImport} 
+        onChange={(e) => handleImport(e)} 
+        className="hidden" 
+        accept="image/*" 
+      />
+      <input 
+        type="file" 
+        ref={editInputRef} 
+        onChange={(e) => handleImport(e, true)} 
         className="hidden" 
         accept="image/*" 
       />
@@ -95,7 +130,7 @@ export default function CreativeModule() {
       <div className="flex flex-col sm:flex-row items-start justify-between mb-16 gap-6">
         <div className="space-y-1">
           <div className="text-[10px] tracking-[0.4em] uppercase font-bold text-[#FF3E00]">Ghost Mark Architecture</div>
-          <h2 className="text-4xl font-serif italic tracking-tighter text-[#F5F5F5]">Visual_Mnemonics</h2>
+          <h2 className="text-4xl font-serif italic tracking-tighter text-[#F5F5F5]">Creative / <span className="opacity-40">Edit</span></h2>
         </div>
         <div className="flex gap-4 w-full sm:w-auto">
           <button 
@@ -111,73 +146,188 @@ export default function CreativeModule() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
         {/* Generation Interface */}
         <div className="lg:col-span-4 space-y-6">
-          <div className="p-8 border border-[#1A1A1A] bg-[#050505] flex flex-col gap-6">
-            <div>
-              <h3 className="text-[10px] font-mono text-white/40 mb-4 uppercase tracking-[0.3em]">Diagram Protocol</h3>
-              <form onSubmit={handleGenerate} className="space-y-4">
-                <div className="relative">
-                  <textarea
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="Subject/Topic for mnemonic diagram..."
-                    className="w-full bg-black/40 border border-white/5 p-4 text-sm font-light min-h-[120px] focus:outline-none focus:border-[#FF3E00]/50 transition-all resize-none placeholder:text-white/10"
-                  />
-                  <button 
-                    type="submit"
-                    disabled={isGenerating || !prompt.trim()}
-                    className="absolute bottom-4 right-4 p-2 bg-[#FF3E00] text-black rounded-sm hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:grayscale"
-                  >
-                    {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                  </button>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="p-4 bg-white/[0.02] border border-white/5 rounded space-y-2">
-                    <h4 className="text-[9px] font-mono text-red-500 uppercase tracking-widest font-bold">GHOST_MARK_HACK: Structure</h4>
-                    <p className="text-[10px] text-white/40 leading-relaxed italic">"Diagrams secure 40% marks even if text is weak. Every answer needs a Flowchart or Block Diagram."</p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <h4 className="text-[9px] font-mono text-white/20 mb-2 uppercase tracking-widest">Logic_Type</h4>
-                      <select 
-                        value={stylePreset}
-                        onChange={(e) => setStylePreset(e.target.value)}
-                        className="w-full bg-black/40 border border-white/5 p-2 text-[10px] font-mono text-white/60 focus:outline-none focus:border-[#FF3E00]/50 transition-all appearance-none uppercase tracking-widest"
-                      >
-                        <option value="Flowchart">Flowchart</option>
-                        <option value="Mindmap">Mindmap</option>
-                        <option value="Block">Block_Diagram</option>
-                        <option value="Hierarchy">Hierarchy</option>
-                      </select>
-                    </div>
-                    <div>
-                      <h4 className="text-[9px] font-mono text-white/20 mb-2 uppercase tracking-widest">Aspect Ratio</h4>
-                      <div className="flex flex-wrap gap-1">
-                        {ratios.map(ratio => (
-                          <button
-                            key={ratio}
-                            type="button"
-                            onClick={() => setAspectRatio(ratio)}
-                            className={cn(
-                              "px-2 py-1 text-[9px] font-mono border transition-all",
-                              aspectRatio === ratio 
-                                ? "bg-[#FF3E00]/10 border-[#FF3E00] text-[#FF3E00]" 
-                                : "bg-white/5 border-white/5 text-white/40 hover:border-white/20"
-                            )}
-                          >
-                            {ratio}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </form>
+          <div className="border border-[#1A1A1A] bg-[#050505] flex flex-col">
+            {/* Tabs */}
+            <div className="flex border-b border-white/5">
+              <button 
+                onClick={() => setActiveTab('synthesis')}
+                className={cn(
+                  "flex-1 py-4 text-[9px] font-mono uppercase tracking-[0.2em] transition-all",
+                  activeTab === 'synthesis' ? "text-[#FF3E00] border-b border-[#FF3E00]" : "text-white/20 hover:text-white/40"
+                )}
+              >
+                New_Synthesis
+              </button>
+              <button 
+                onClick={() => setActiveTab('edit')}
+                className={cn(
+                  "flex-1 py-4 text-[9px] font-mono uppercase tracking-[0.2em] transition-all",
+                  activeTab === 'edit' ? "text-[#FF3E00] border-b border-[#FF3E00]" : "text-white/20 hover:text-white/40"
+                )}
+              >
+                AI_Assistant_Edit
+              </button>
             </div>
 
-            <div className="space-y-4">
-               <h3 className="text-[10px] font-mono text-white/40 uppercase tracking-[0.3em]">Seed History</h3>
+            <div className="p-8 flex flex-col gap-6">
+              {activeTab === 'synthesis' ? (
+                <div key="synthesis-panel">
+                  <h3 className="text-[10px] font-mono text-white/40 mb-4 uppercase tracking-[0.3em]">Synthesis Engine</h3>
+                  <form onSubmit={handleGenerate} className="space-y-5">
+                    <div className="space-y-2">
+                      <h4 className="text-[9px] font-mono text-white/20 uppercase tracking-widest">Primary Prompt</h4>
+                      <div className="relative">
+                        <textarea
+                          value={prompt}
+                          onChange={(e) => setPrompt(e.target.value)}
+                          placeholder="Describe the manifestation..."
+                          className="w-full bg-black/40 border border-white/5 p-4 text-sm font-light min-h-[100px] focus:outline-none focus:border-[#FF3E00]/50 transition-all resize-none placeholder:text-white/10"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <h4 className="text-[9px] font-mono text-white/20 uppercase tracking-widest">Negative Protocol</h4>
+                      <textarea
+                        value={negativePrompt}
+                        onChange={(e) => setNegativePrompt(e.target.value)}
+                        placeholder="Avoid elements (e.g. blur, low quality)..."
+                        className="w-full bg-black/40 border border-white/5 p-3 text-[11px] font-light min-h-[60px] focus:outline-none focus:border-red-500/30 transition-all resize-none placeholder:text-white/10"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4">
+                      <div>
+                        <h4 className="text-[9px] font-mono text-white/20 mb-2 uppercase tracking-widest">Visual_Style</h4>
+                        <div className="grid grid-cols-2 gap-2">
+                          {stylePresets.map(style => (
+                            <button
+                              key={style}
+                              type="button"
+                              onClick={() => setStylePreset(style)}
+                              className={cn(
+                                "px-3 py-2 text-[9px] font-mono border transition-all text-left uppercase truncate",
+                                stylePreset === style 
+                                  ? "bg-[#FF3E00]/10 border-[#FF3E00] text-[#FF3E00]" 
+                                  : "bg-white/5 border-white/5 text-white/40 hover:border-white/20"
+                              )}
+                            >
+                              {style}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <h4 className="text-[9px] font-mono text-white/20 mb-2 uppercase tracking-widest">Aspect Ratio</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {ratios.map(ratio => (
+                            <button
+                              key={ratio}
+                              type="button"
+                              onClick={() => setAspectRatio(ratio)}
+                              className={cn(
+                                "px-2.5 py-1.5 text-[9px] font-mono border transition-all",
+                                aspectRatio === ratio 
+                                  ? "bg-[#FF3E00]/10 border-[#FF3E00] text-[#FF3E00]" 
+                                  : "bg-white/5 border-white/5 text-white/40 hover:border-white/20"
+                              )}
+                            >
+                              {ratio}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button 
+                      type="submit"
+                      disabled={isGenerating || !prompt.trim()}
+                      className="w-full py-4 bg-[#FF3E00] text-black font-mono font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-[#FF3E00]/90 transition-all disabled:opacity-50"
+                    >
+                      {isGenerating ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Synthesizing...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4" />
+                          Initiate_Synthesis
+                        </>
+                      )}
+                    </button>
+                  </form>
+                </div>
+              ) : (
+                <div key="edit-panel" className="space-y-6">
+                  <h3 className="text-[10px] font-mono text-white/40 mb-2 uppercase tracking-[0.3em]">AI_Assisted_Modification</h3>
+                  
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <h4 className="text-[9px] font-mono text-white/20 uppercase tracking-widest">Target Image</h4>
+                      {!editImage ? (
+                        <button 
+                          onClick={() => editInputRef.current?.click()}
+                          className="w-full aspect-video border border-dashed border-white/10 rounded-lg flex flex-col items-center justify-center gap-2 hover:border-[#FF3E00]/40 transition-all bg-white/[0.02]"
+                        >
+                          <Upload className="w-6 h-6 text-white/20" />
+                          <span className="text-[9px] font-mono text-white/20 uppercase">Load_Base_Layer</span>
+                        </button>
+                      ) : (
+                        <div className="relative aspect-video rounded-lg overflow-hidden border border-white/10">
+                          <img src={editImage} alt="edit target" className="w-full h-full object-cover" />
+                          <button 
+                            onClick={() => setEditImage(null)}
+                            className="absolute top-2 right-2 p-1.5 bg-black/60 backdrop-blur-md rounded-full text-white/60 hover:text-white"
+                          >
+                            <Box className="w-3 h-3 rotate-45" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <h4 className="text-[9px] font-mono text-white/20 uppercase tracking-widest">Modification Instruction</h4>
+                      <textarea
+                        value={prompt}
+                        onChange={(e) => setPrompt(e.target.value)}
+                        placeholder="e.g. Change background to cyberpunk neon city, make it 8-bit style..."
+                        className="w-full bg-black/40 border border-white/5 p-4 text-sm font-light min-h-[120px] focus:outline-none focus:border-[#FF3E00]/50 transition-all resize-none placeholder:text-white/10"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button className="py-3 px-2 border border-white/5 bg-white/[0.02] text-[8px] font-mono uppercase tracking-widest text-white/40 hover:text-white/80 transition-all">Background_Swap</button>
+                      <button className="py-3 px-2 border border-white/5 bg-white/[0.02] text-[8px] font-mono uppercase tracking-widest text-white/40 hover:text-white/80 transition-all">Style_Transfer</button>
+                      <button className="py-3 px-2 border border-white/5 bg-white/[0.02] text-[8px] font-mono uppercase tracking-widest text-white/40 hover:text-white/80 transition-all">Element_Removal</button>
+                      <button className="py-3 px-2 border border-white/5 bg-white/[0.02] text-[8px] font-mono uppercase tracking-widest text-white/40 hover:text-white/80 transition-all">Enhance_Detail</button>
+                    </div>
+
+                    <button 
+                      onClick={handleGenerate}
+                      disabled={isGenerating || !prompt.trim() || !editImage}
+                      className="w-full py-4 bg-[#FF3E00] text-black font-mono font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-[#FF3E00]/90 transition-all disabled:opacity-50"
+                    >
+                      {isGenerating ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Analyzing_Pixels...
+                        </>
+                      ) : (
+                        <>
+                          <Wand2 className="w-4 h-4" />
+                          Apply_Magic_Edit
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-8 border-t border-white/5">
+               <h3 className="text-[10px] font-mono text-white/40 uppercase tracking-[0.3em] mb-4">Seed History</h3>
                <div className="grid grid-cols-3 gap-2">
                  {assets.map(asset => (
                    <button 

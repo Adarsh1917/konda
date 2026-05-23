@@ -4,11 +4,12 @@ import remarkGfm from 'remark-gfm';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
-import { Bot, User, ArrowRight, Mic, X, Volume2, VolumeX, Trash2, Plus, Image as ImageIcon, FileText, Camera, Upload, Save, Download, Share2, Table, RefreshCcw, GitFork, ShieldCheck, Zap } from 'lucide-react';
+import { Bot, User, ArrowRight, Mic, X, Volume2, VolumeX, Trash2, Plus, Image as ImageIcon, FileText, Camera, Upload, Save, Download, Share2, Table, RefreshCcw, GitFork, ShieldCheck, Zap, Copy, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { Message, SavedSession, ProficiencyScore, ThinkingStatus } from '../types';
 import { useVoice } from '../hooks/useVoice';
+import { StreamingMarkdown } from './StreamingMarkdown';
 
 // Extend jsPDF with autotable types
 declare module 'jspdf' {
@@ -43,11 +44,22 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [sessionTitle, setSessionTitle] = useState('');
+  const [completedStreamingIds, setCompletedStreamingIds] = useState<Set<string>>(() => new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const createdUrls = useRef<Set<string>>(new Set());
   const { isListening, startListening, stopListening, speak } = useVoice();
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
+    }
+  }, [input]);
 
   // Speak new model messages if autoSpeak is on
   useEffect(() => {
@@ -58,6 +70,13 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
       speak(plainText);
     }
   }, [messages, autoSpeak, speak]);
+
+  useEffect(() => {
+    return () => {
+      // Memory cleanup
+      createdUrls.current.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, []);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -91,12 +110,16 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'file') => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      const newFiles = Array.from(files).map(file => ({
-        id: Math.random().toString(36).substr(2, 9),
-        name: file.name,
-        type: file.type,
-        url: URL.createObjectURL(file)
-      }));
+      const newFiles = Array.from(files).map(file => {
+        const url = URL.createObjectURL(file);
+        createdUrls.current.add(url);
+        return {
+          id: Math.random().toString(36).substr(2, 9),
+          name: file.name,
+          type: file.type,
+          url
+        };
+      });
       setSelectedFiles(prev => [...prev, ...newFiles]);
       setIsAttachmentMenuOpen(false);
     }
@@ -218,14 +241,14 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
   };
 
   return (
-    <div id="command-center" className="flex flex-col h-full bg-transparent px-10">
-      <div className="flex-1 overflow-y-auto py-10 space-y-12" ref={scrollRef}>
+    <div id="command-center" className="flex flex-col h-full bg-[#050505] relative">
+      <div className="flex-1 overflow-y-auto px-4 md:px-10 py-6 space-y-8 scroll-smooth custom-scrollbar" ref={scrollRef}>
         <AnimatePresence initial={false}>
           {messages.length === 0 && selectedFiles.length === 0 && (
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="h-full flex flex-col items-center justify-center text-center space-y-6 relative"
+              className="h-full flex flex-col items-center justify-center text-center space-y-6 relative py-12"
             >
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[120px] sm:text-[240px] font-serif italic opacity-[0.02] pointer-events-none select-none">
                 K
@@ -233,7 +256,7 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
               
               <div className="z-10 space-y-8">
                 <div className="w-16 h-16 rounded-full bg-[#FF3E00]/5 border border-[#FF3E00]/10 flex items-center justify-center mx-auto">
-                  <Bot className="w-8 h-8 text-[#FF3E00]/40" />
+                  <Bot className="w-12 h-12 text-[#FF3E00]/40" />
                 </div>
                 
                 <div className="space-y-2">
@@ -274,55 +297,83 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
             </motion.div>
           )}
 
-          {messages.map((msg) => {
+          {messages.map((msg, index) => {
             const isSystemBusy = msg.content.includes('[SYSTEM_BUSY') || msg.content.includes('[INTELLIGENCE_UPLINK_DEGRADED]');
             const isAlert = msg.content.includes('[CONNECTION_LATENCY') || msg.content.includes('[KERNEL_ALERT') || isSystemBusy;
-            
+            const isLatestMessage = index === messages.length - 1;
+            const shouldStream = msg.role === 'assistant' && isLatestMessage && !completedStreamingIds.has(msg.id);
+
             return (
               <motion.div
-                key={msg.id}
+                key={`${msg.id}-${index}`}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className={cn(
-                  "flex flex-col gap-3 group px-4",
-                  msg.role === 'user' ? "items-end text-right" : "items-start text-left",
-                  isAlert && "w-full max-w-2xl mx-auto"
+                  "flex flex-col gap-2 group px-2 w-full max-w-4xl mx-auto py-2",
+                  msg.role === 'user' ? "items-end text-right" : "items-start text-left"
                 )}
               >
-                <div className="flex items-center gap-3 opacity-20">
+                <div className="flex items-center gap-2.5 opacity-20">
                   {msg.role === 'user' ? (
-                    <span className="text-[10px] tracking-widest font-mono uppercase">Strategist_Auth</span>
+                    <span className="text-[9px] tracking-widest font-mono uppercase">Strategist_Auth</span>
                   ) : (
                     <span className={cn(
-                      "text-[10px] tracking-widest font-mono uppercase",
+                      "text-[9px] tracking-widest font-mono uppercase",
                       isAlert ? (isSystemBusy ? "text-yellow-500" : "text-[#FF3E00]") : "text-[#FF3E00] font-bold"
                     )}>
                       {isAlert ? (isSystemBusy ? "System_Latency" : "System_Alert") : "GOD_LEVEL_INTEL"}
                     </span>
                   )}
                   <div className="w-1 h-1 rounded-full bg-white/40" />
-                  <span className="text-[10px] font-mono">
+                  <span className="text-[9px] font-mono">
                      {new Date(msg.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
                 
                 <div className={cn(
-                  "max-w-[85%] leading-relaxed",
+                  "max-w-[90%] md:max-w-[92%] leading-relaxed text-sm md:text-base",
                   msg.role === 'user' 
-                    ? "text-xl font-light tracking-tight text-white/90" 
+                    ? "text-white/90 bg-white/[0.02] border border-white/5 rounded-2xl rounded-tr-none px-5 py-3 font-light tracking-wide shadow-sm" 
                     : cn(
-                        "text-base font-sans text-white/70",
+                        "text-white/80 font-sans w-full",
                         isAlert && cn(
-                          "p-8 border rounded-lg backdrop-blur-sm shadow-xl",
+                          "p-6 border rounded-lg backdrop-blur-sm shadow-xl",
                           isSystemBusy 
                             ? "bg-yellow-500/5 border-yellow-500/20 shadow-[0_0_30px_rgba(234,179,8,0.05)]"
                             : "bg-[#FF3E00]/5 border-[#FF3E00]/20 shadow-[0_0_30px_rgba(255,62,0,0.1)]"
                         )
                       )
                 )}>
-                  <div className={cn("markdown-body", isAlert && "text-white/80")}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                  <div className={cn("markdown-body w-full", isAlert && "text-white/85")}>
+                    {msg.role === 'assistant' ? (
+                      <StreamingMarkdown 
+                        content={msg.content}
+                        shouldAnimate={shouldStream}
+                        onComplete={() => {
+                          setCompletedStreamingIds(prev => {
+                            const next = new Set(prev);
+                            next.add(msg.id);
+                            return next;
+                          });
+                        }}
+                      />
+                    ) : (
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                    )}
                   </div>
+                  
+                  {msg.role === 'assistant' && !isAlert && (
+                    <MessageActionBar 
+                      content={msg.content} 
+                      onRegenerate={() => {
+                        const userMsgs = messages.filter(m => m.role === 'user');
+                        if (userMsgs.length > 0) {
+                          onSendMessage(userMsgs[userMsgs.length - 1].content);
+                        }
+                      }}
+                    />
+                  )}
+
                   {isAlert && (
                     <button
                       onClick={() => {
@@ -330,7 +381,7 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
                         if (lastUserMsg) onSendMessage(lastUserMsg.content);
                       }}
                       className={cn(
-                        "mt-6 flex items-center gap-2 px-6 py-2 border text-[10px] font-mono uppercase tracking-widest transition-all rounded-sm",
+                        "mt-5 flex items-center gap-2 px-5 py-2 border text-[10px] font-mono uppercase tracking-widest transition-all rounded-sm",
                         isSystemBusy
                           ? "border-yellow-500/40 text-yellow-500 hover:bg-yellow-500 hover:text-black"
                           : "border-[#FF3E00]/40 text-[#FF3E00] hover:bg-[#FF3E00] hover:text-white"
@@ -349,9 +400,9 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="flex flex-col gap-2 items-start px-4 w-full max-w-2xl"
+              className="flex flex-col gap-2 items-start px-4 w-full max-w-4xl mx-auto py-2"
             >
-               <div className="flex items-center gap-3">
+               <div className="flex items-center gap-3 w-full">
                   <span className={cn(
                     "text-[10px] tracking-[0.4em] font-mono uppercase animate-pulse",
                     thinkingStatus.startsWith('retrying') ? "text-yellow-500" : "text-[#FF3E00]"
@@ -368,12 +419,12 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
                     thinkingStatus.startsWith('retrying') ? "bg-yellow-500/10" : "bg-[#FF3E00]/10"
                   )} />
                </div>
-               <div className="text-[9px] font-mono text-white/20 uppercase tracking-widest">
+               <div className="text-[9px] font-mono text-white/25 uppercase tracking-widest">
                   {thinkingStatus.startsWith('retrying') 
                     ? "Model high-demand detected. Implementing progressive backoff protocols..."
                     : "Simulating: Strategist | Architect | Psychologist | Ethicist | Innovator"}
                </div>
-               <div className="flex space-x-1 mt-2">
+               <div className="flex space-x-1 mt-1">
                   <div className="h-0.5 w-32 bg-white/5 rounded-full overflow-hidden">
                     <motion.div 
                       animate={{ x: [-128, 128] }} 
@@ -390,8 +441,8 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
         </AnimatePresence>
       </div>
 
-      <div className="py-8 border-t border-white/5 bg-[#0A0A0A]">
-        <div className="max-w-2xl mx-auto flex flex-col gap-6">
+      <div className="py-4 border-t border-white/[0.04] bg-[#050507]/95 backdrop-blur-md sticky bottom-0 z-30 px-4 md:px-10">
+        <div className="max-w-4xl mx-auto flex flex-col gap-4">
           {/* Selected Files Preview */}
           <AnimatePresence>
             {selectedFiles.length > 0 && (
@@ -476,18 +527,25 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
               </AnimatePresence>
             </div>
 
-            <div className="flex-1 relative">
-               <input
-                type="text"
+            <div className="flex-1 relative bg-white/[0.015] hover:bg-white/[0.03] border border-white/10 focus-within:border-[#FF3E00]/40 rounded-xl px-4 py-2.5 transition-all flex items-end gap-3 min-h-[44px]">
+              <textarea
+                ref={textareaRef}
+                rows={1}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder={isListening ? "Listening..." : "Koda_Kernel_Input..."}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmit(e);
+                  }
+                }}
+                placeholder={isListening ? "Listening..." : "Type instructions or ask KONDA... (Shift + Enter for new line)"}
                 disabled={isThinking}
-                className="w-full bg-transparent border-b border-white/10 py-2.5 text-2xl font-light focus:outline-none focus:border-[#FF3E00] transition-all placeholder:text-white/10 pr-24"
+                className="flex-1 bg-transparent text-sm md:text-base text-white/90 leading-relaxed focus:outline-none placeholder:text-white/20 resize-none max-h-36 min-h-[22px] py-0.5 custom-scrollbar"
               />
-              <div className="absolute right-0 bottom-4 flex items-center gap-4">
+              <div className="flex items-center gap-3 shrink-0 pb-0.5">
                 {isListening && (
-                  <div className="flex gap-0.5 items-end h-4 mr-2">
+                  <div className="flex gap-0.5 items-end h-4 mr-1">
                     {[1,2,3,4].map(i => (
                       <motion.div
                         key={i}
@@ -502,27 +560,27 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
                   type="button"
                   onClick={handleMicClick}
                   className={cn(
-                    "p-2 rounded-full transition-all",
+                    "p-2 rounded-full transition-all cursor-pointer",
                     isListening ? "bg-[#FF3E00]/20 text-[#FF3E00]" : "text-white/20 hover:text-[#FF3E00]"
                   )}
                   title={isListening ? "Stop Listening" : "Voice Input"}
                 >
-                  {isListening ? <X className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                  {isListening ? <X className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                 </button>
 
                 <button
                   type="submit"
                   disabled={(!input.trim() && selectedFiles.length === 0) || isThinking}
                   className={cn(
-                    "p-2 rounded-full transition-all bg-[#FF3E00]/10 text-[#FF3E00] hover:bg-[#FF3E00] hover:text-white disabled:opacity-20",
+                    "p-2 rounded-full transition-all bg-[#FF3E00]/10 text-[#FF3E00] hover:bg-[#FF3E00] hover:text-white disabled:opacity-20 cursor-pointer",
                   )}
                   title="Execute Command"
                 >
-                  <ArrowRight className="w-5 h-5" />
+                  <ArrowRight className="w-4 h-4" />
                 </button>
                 
                 <div className="hidden sm:flex text-[8px] tracking-widest text-[#FF3E00] opacity-40 group-focus-within:opacity-100 transition-opacity">
-                  CTRL+ENTER
+                  ENTER
                 </div>
               </div>
             </div>
@@ -746,6 +804,91 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
           </div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+function MessageActionBar({ content, onRegenerate }: { content: string; onRegenerate?: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const [shared, setShared] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({ text: content });
+        setShared(true);
+      } catch (e) {
+        console.log("Web share failed or canceled", e);
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(content);
+        setShared(true);
+        setTimeout(() => setShared(false), 2000);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-4 mt-3 text-[10px] font-mono text-white/20">
+      <button
+        onClick={handleCopy}
+        className="flex items-center gap-1 hover:text-white transition-colors cursor-pointer"
+        title="Copy response body"
+      >
+        {copied ? (
+          <>
+            <Check className="w-3 h-3 text-[#FF3E00]" />
+            <span className="text-[#FF3E00]">COPIED</span>
+          </>
+        ) : (
+          <>
+            <Copy className="w-3 h-3" />
+            <span>COPY</span>
+          </>
+        )}
+      </button>
+
+      <button
+        onClick={handleShare}
+        className="flex items-center gap-1 hover:text-white transition-colors cursor-pointer"
+        title="Share contents"
+      >
+        {shared ? (
+          <>
+            <Check className="w-3 h-3 text-[#FF3E00]" />
+            <span className="text-[#FF3E00]">SHARED</span>
+          </>
+        ) : (
+          <>
+            <Share2 className="w-3 h-3" />
+            <span>SHARE</span>
+          </>
+        )}
+      </button>
+
+      {onRegenerate && (
+        <button
+          onClick={onRegenerate}
+          className="flex items-center gap-1 hover:text-[#FF3E00] transition-colors cursor-pointer"
+          title="Regenerate from parent prompt"
+        >
+          <RefreshCcw className="w-3 h-3" />
+          <span>REGENERATE</span>
+        </button>
+      )}
     </div>
   );
 }

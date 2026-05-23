@@ -17,11 +17,11 @@ interface SidebarProps {
 }
 
 const modules: { id: ModuleId; icon: any; label: string }[] = [
-  { id: 'kosmos', icon: Cpu, label: 'KOSMOS_CORE' },
+  { id: 'casual', icon: Cpu, label: 'CASUAL' },
   { id: 'command', icon: Terminal, label: 'COMMAND_CENTER' },
   { id: 'math', icon: Calculator, label: 'QUANT_SYNAPSE' },
-  { id: 'polyglot', icon: Languages, label: 'LOGIC_TRANS' },
-  { id: 'creative', icon: Palette, label: 'SYNTHESIS_LAB' },
+  { id: 'language', icon: Languages, label: 'LANGUAGE' },
+  { id: 'creative', icon: Palette, label: 'CREATIVE/EDIT' },
   { id: 'engineering', icon: Code2, label: 'GOD_INTEL_OS' },
   { id: 'memory', icon: Database, label: 'COLLECTIVE_BANK' },
 ];

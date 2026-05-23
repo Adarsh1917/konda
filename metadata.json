@@ -2,5 +2,5 @@
   "name": "Konda",
   "description": "A next-generation Personal OS and Agent for elite productivity, creative direction, mathematics, and polyglot translation.",
   "requestFramePermissions": ["microphone", "camera"],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

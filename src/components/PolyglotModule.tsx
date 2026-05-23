@@ -16,8 +16,8 @@ export default function PolyglotModule() {
   return (
     <div id="polyglot-module" className="p-10 h-full bg-transparent text-[#F5F5F5] overflow-y-auto">
       <div className="flex flex-col mb-16 px-4">
-        <div className="text-[10px] tracking-[0.4em] uppercase font-bold text-[#FF3E00] mb-2">Neural Cross-Logic</div>
-        <h2 className="text-4xl font-serif italic tracking-tighter text-[#F5F5F5]">Cognitive_Synapse</h2>
+        <div className="text-[10px] tracking-[0.4em] uppercase font-bold text-[#FF3E00] mb-2">Linguistic Synthesis Reactor</div>
+        <h2 className="text-4xl font-serif italic tracking-tighter text-[#F5F5F5]">Language <span className="opacity-40">Translate</span></h2>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
