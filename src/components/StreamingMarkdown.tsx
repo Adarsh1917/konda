@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -9,38 +9,25 @@ interface StreamingMarkdownProps {
 }
 
 export function StreamingMarkdown({ content, shouldAnimate, onComplete }: StreamingMarkdownProps) {
-  const [displayedText, setDisplayedText] = useState(shouldAnimate ? '' : content);
+  const onCompleteRef = useRef(onComplete);
 
   useEffect(() => {
-    if (!shouldAnimate) {
-      setDisplayedText(content);
-      return;
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
+  useEffect(() => {
+    if (shouldAnimate) {
+      // Defer completion call slightly to ensure parent state updates happen outside of the active render cycle
+      const timer = setTimeout(() => {
+        onCompleteRef.current?.();
+      }, 50);
+      return () => clearTimeout(timer);
     }
-
-    const words = content.split(' ');
-    let currentWordIndex = 0;
-    setDisplayedText('');
-
-    // Stream smoothly at a constant rate
-    // Calculate adaptive timer speed based on message length for balanced visual speed
-    const intervalTime = Math.max(8, Math.min(25, 300 / (words.length || 1)));
-
-    const timer = setInterval(() => {
-      if (currentWordIndex < words.length) {
-        setDisplayedText(prev => (prev ? prev + ' ' : '') + words[currentWordIndex]);
-        currentWordIndex++;
-      } else {
-        clearInterval(timer);
-        if (onComplete) onComplete();
-      }
-    }, intervalTime);
-
-    return () => clearInterval(timer);
-  }, [content, shouldAnimate, onComplete]);
+  }, [shouldAnimate]);
 
   return (
     <ReactMarkdown remarkPlugins={[remarkGfm]}>
-      {displayedText}
+      {content}
     </ReactMarkdown>
   );
 }

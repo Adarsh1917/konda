@@ -7,7 +7,7 @@ import * as XLSX from 'xlsx';
 import { Bot, User, ArrowRight, Mic, X, Volume2, VolumeX, Trash2, Plus, Image as ImageIcon, FileText, Camera, Upload, Save, Download, Share2, Table, RefreshCcw, GitFork, ShieldCheck, Zap, Copy, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
-import { Message, SavedSession, ProficiencyScore, ThinkingStatus } from '../types';
+import { Message, SavedSession, ProficiencyScore, ThinkingStatus, FileAttachment } from '../types';
 import { useVoice } from '../hooks/useVoice';
 import { StreamingMarkdown } from './StreamingMarkdown';
 
@@ -18,16 +18,9 @@ declare module 'jspdf' {
   }
 }
 
-interface SelectedFile {
-  id: string;
-  name: string;
-  type: string;
-  url: string;
-}
-
 interface CommandCenterProps {
   messages: Message[];
-  onSendMessage: (content: string) => void;
+  onSendMessage: (content: string, files?: FileAttachment[]) => void;
   onClearChat: () => void;
   onArchiveChat: () => void;
   isThinking: boolean;
@@ -39,7 +32,7 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
   const [input, setInput] = useState('');
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [isAttachmentMenuOpen, setIsAttachmentMenuOpen] = useState(false);
-  const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<FileAttachment[]>([]);
   const [showCamera, setShowCamera] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -84,14 +77,57 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
     }
   }, [messages, isThinking]);
 
+  const readFileAsAttachment = (file: File): Promise<FileAttachment> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      const isTextOrCode = 
+        file.type.startsWith('text/') || 
+        file.name.endsWith('.js') || 
+        file.name.endsWith('.ts') || 
+        file.name.endsWith('.tsx') || 
+        file.name.endsWith('.jsx') || 
+        file.name.endsWith('.py') || 
+        file.name.endsWith('.json') || 
+        file.name.endsWith('.css') || 
+        file.name.endsWith('.html') || 
+        file.name.endsWith('.md');
+
+      if (isTextOrCode) {
+        reader.onload = (event) => {
+          const text = event.target?.result as string;
+          resolve({
+            id: Math.random().toString(36).substring(2, 11),
+            name: file.name,
+            type: file.type || 'text/plain',
+            url: URL.createObjectURL(file),
+            textContent: text,
+            base64: btoa(unescape(encodeURIComponent(text)))
+          });
+        };
+        reader.readAsText(file);
+      } else {
+        reader.onload = (event) => {
+          const result = event.target?.result as string;
+          const base64 = result.split(',')[1];
+          resolve({
+            id: Math.random().toString(36).substring(2, 11),
+            name: file.name,
+            type: file.type || 'application/octet-stream',
+            url: URL.createObjectURL(file),
+            base64: base64
+          });
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() && selectedFiles.length === 0) return;
     if (isThinking) return;
 
-    // In a real app, we would process selectedFiles here.
-    // For now we'll just send the message.
-    onSendMessage(input);
+    onSendMessage(input, selectedFiles);
     setInput('');
     setSelectedFiles([]);
   };
@@ -107,20 +143,15 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'file') => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'file') => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      const newFiles = Array.from(files).map(file => {
-        const url = URL.createObjectURL(file);
-        createdUrls.current.add(url);
-        return {
-          id: Math.random().toString(36).substr(2, 9),
-          name: file.name,
-          type: file.type,
-          url
-        };
-      });
-      setSelectedFiles(prev => [...prev, ...newFiles]);
+      const attachments: FileAttachment[] = [];
+      for (const file of Array.from(files)) {
+        const attachment = await readFileAsAttachment(file);
+        attachments.push(attachment);
+      }
+      setSelectedFiles(prev => [...prev, ...attachments]);
       setIsAttachmentMenuOpen(false);
     }
   };
@@ -160,11 +191,13 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
       if (ctx) {
         ctx.drawImage(videoRef.current, 0, 0);
         const url = canvas.toDataURL('image/png');
+        const base64 = url.split(',')[1];
         setSelectedFiles(prev => [...prev, {
-          id: Math.random().toString(36).substr(2, 9),
+          id: Math.random().toString(36).substring(2, 11),
           name: `capture_${Date.now()}.png`,
           type: 'image/png',
-          url
+          url,
+          base64: base64
         }]);
         stopCamera();
       }
@@ -358,7 +391,26 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
                         }}
                       />
                     ) : (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                      <div className="flex flex-col gap-2">
+                        {msg.files && msg.files.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mb-2 justify-end">
+                            {msg.files.map(file => (
+                              <div key={file.id} className="bg-white/[0.03] border border-white/5 rounded-md p-1.5 flex items-center gap-2 text-xs text-left">
+                                {file.type.startsWith('image/') ? (
+                                  <img src={file.url} alt={file.name} className="w-8 h-8 object-cover rounded-sm grayscale" />
+                                ) : (
+                                  <FileText className="w-4 h-4 text-[#FF3E00]" />
+                                )}
+                                <div className="flex flex-col max-w-[120px]">
+                                  <span className="text-[10px] text-white/70 truncate">{file.name}</span>
+                                  <span className="text-[8px] text-[#FF3E00]/65 uppercase font-mono">{file.type.split('/')[1] || 'FILE'}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                      </div>
                     )}
                   </div>
                   

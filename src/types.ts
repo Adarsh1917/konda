@@ -1,10 +1,20 @@
 export type ModuleId = 'command' | 'math' | 'language' | 'creative' | 'engineering' | 'memory' | 'casual';
 
+export interface FileAttachment {
+  id: string;
+  name: string;
+  type: string;
+  url: string;
+  base64?: string;
+  textContent?: string;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: number;
+  files?: FileAttachment[];
 }
 
 export interface Shortcut {

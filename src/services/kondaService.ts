@@ -1,19 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
 import { ThinkingStatus } from "../types";
-
-let aiInstance: GoogleGenAI | null = null;
-
-function getAI(): GoogleGenAI | null {
-  if (!aiInstance) {
-    const key = process.env.GEMINI_API_KEY;
-    if (!key) {
-      console.warn("[SYSTEM_WARNING: MISSING_UPLINK_KEY] process.env.GEMINI_API_KEY is not defined. Local Emulation Core will be active.");
-      return null;
-    }
-    aiInstance = new GoogleGenAI({ apiKey: key });
-  }
-  return aiInstance;
-}
 
 const SYSTEM_PROMPT = `You are KONDA AI — operating in MASTER UNIVERSAL INTELLIGENCE MODE.
 
@@ -60,7 +45,8 @@ Adapt tone, pacing, complexity, emotional intensity, vocabulary, and conversatio
 - **Versatility**: Support realistic, cinematic, artistic, technical, UI/UX, and conceptual imagery.
 
 ### 📘 RESPONSE PHILOSOPHY:
-Combine scientific realism, operational robustness, and human-centered adaptability. True intelligence is not knowing everything—it is remaining singularly accurate, useful, and adaptive when key information is missing or conditions turn hostile.`;
+- **Core Stance**: Combine scientific realism, operational robustness, and human-centered adaptability. True intelligence is not knowing everything—it is remaining singularly accurate, useful, and adaptive when key information is missing or conditions turn hostile.
+- **Anti-Repetition Protocol**: Never repeat previous answers, exact phrased sequences, or stack redundant prompt instructions. Prevent looped responses, mechanical statements, or recursive babbling. If a context contains previous responses, always formulate a fresh, diverse, and contextually coherent answer.`;
 
 const CASUAL_PROMPT = `You are Kosmos, a casual but intelligent companion. 
 Your goal is to be friendly, helpful, and extremely succinct. 
@@ -240,101 +226,178 @@ To resolve the underlying 429 quota exhaustion:
 *How would you like to proceed? Feel free to ask technical, mathematical, causal, or casual questions.*`;
 }
 
-export async function kondaChat(
-  messages: { role: 'user' | 'model'; parts: { text: string }[] }[],
-  onStatusChange?: (status: ThinkingStatus) => void,
-  mode: 'intel' | 'casual' = 'intel'
-) {
-  const userMessages = messages.filter(m => m.role === 'user');
-  const lastUserText = userMessages[userMessages.length - 1]?.parts?.[0]?.text || "";
+function cleanAndOptimizeHistory(
+  messages: { role: 'user' | 'model'; parts: any[] }[]
+): { role: 'user' | 'model'; parts: any[] }[] {
+  if (!messages || messages.length === 0) return [];
 
-  // 1. Check if the API is available
-  const ai = getAI();
-  if (!ai) {
-    if (onStatusChange) onStatusChange('idle');
-    return generateLocalEmulationResponse(lastUserText, mode);
+  // 1. Remove duplicate identical consecutive messages to avoid infinite loops
+  const uniqueMessages: typeof messages = [];
+  for (const msg of messages) {
+    if (uniqueMessages.length === 0) {
+      uniqueMessages.push(msg);
+      continue;
+    }
+    const lastMsg = uniqueMessages[uniqueMessages.length - 1];
+    
+    // Check if roles are equal and contents are identical
+    const msgText = msg.parts.map(p => p.text || '').join('\n').trim();
+    const lastMsgText = lastMsg.parts.map(p => p.text || '').join('\n').trim();
+    
+    if (msg.role === lastMsg.role && msgText === lastMsgText && msgText !== '') {
+      continue; // Skip consecutive identical duplicate messages
+    }
+    uniqueMessages.push(msg);
   }
 
-  const maxRetries = 2; // Reduced to prevent long user wait times on actual hard exhaustion
-  let lastError: any = null;
-  const currentSystemPrompt = mode === 'casual' ? CASUAL_PROMPT : SYSTEM_PROMPT;
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      if (attempt > 0 && onStatusChange) {
-        onStatusChange(`retrying_${attempt}` as ThinkingStatus);
-      } else if (onStatusChange) {
-        onStatusChange('thinking');
-      }
-
-      // Model rotation strategy for maximum rate limit resilience
-      let modelName = "gemini-3.5-flash";
-      if (mode === 'casual') {
-        modelName = attempt === 0 ? "gemini-3.5-flash" : "gemini-3.1-flash-lite";
-      } else {
-        modelName = attempt === 0 ? "gemini-3.5-flash" : (attempt === 1 ? "gemini-3.1-pro-preview" : "gemini-3.1-flash-lite");
-      }
-      
-      const response = await ai.models.generateContent({
-        model: modelName,
-        contents: messages,
-        config: {
-          systemInstruction: currentSystemPrompt,
-          temperature: 0.7,
-        },
-      });
-      
-      if (onStatusChange) onStatusChange('idle');
-      return response.text || "I was unable to synchronize a coherent response. The neural link may be experiencing high-level interference.";
-    } catch (error: any) {
-      lastError = error;
-      console.error(`[SYNC_ATTEMPT_${attempt + 1}_FAILED]`, error);
-      
-      const errorString = (error.message || String(error)).toLowerCase();
-      const isQuotaError = 
-        error?.status === 429 || 
-        error?.code === 429 ||
-        error?.error?.code === 429 ||
-        error?.details?.some((d: any) => d.reason === 'QUOTA_EXCEEDED') ||
-        errorString.includes('429') || 
-        errorString.includes('resource_exhausted') ||
-        errorString.includes('quota') ||
-        errorString.includes('rate limit') ||
-        errorString.includes('high demand') ||
-        errorString.includes('exceeded your current quota');
-
-      // Check if it is a hard quota exhaustion (unrecoverable by instant retries)
-      const isHardQuotaExceeded = 
-        errorString.includes('exceeded your current quota') ||
-        errorString.includes('billing') ||
-        errorString.includes('plan') ||
-        errorString.includes('billing details') ||
-        errorString.includes('check your plan');
-
-      // If hard quota is hit, do not waste user time waiting; immediately fallback to local emulation!
-      if (isQuotaError && isHardQuotaExceeded) {
-        console.warn("[HARD_QUOTA_EXCEEDED] Escalating immediately to Local Cognition Core.");
-        if (onStatusChange) onStatusChange('idle');
-        return generateLocalEmulationResponse(lastUserText, mode);
-      }
-
-      // For standard rate limit, retry with extremely fast schedules (e.g. 2s, 4s) to keep app snappy
-      if (isQuotaError && attempt < maxRetries) {
-        const backoffSchedule = [2000, 4000];
-        const waitTime = backoffSchedule[attempt] || 4000;
-        
-        console.warn(`[RETRY_PROTOCOL] Rate controls engaged (Attempt ${attempt + 1}). Backing off for ${waitTime/1000}s...`);
-        await sleep(waitTime);
-        continue;
-      }
-
-      // If all retries failed or we hit an unhandled error, fall back gracefully to local emulation
-      if (onStatusChange) onStatusChange('idle');
-      console.warn("[EMER_FALLBACK] Uplink failed completely. Initializing Local Cognition Core.");
-      return generateLocalEmulationResponse(lastUserText, mode);
+  // 2. Combine consecutive roles to enforce strict alternation (user -> model -> user -> model)
+  const alternatingMessages: typeof messages = [];
+  for (const msg of uniqueMessages) {
+    if (alternatingMessages.length === 0) {
+      alternatingMessages.push({ ...msg, parts: [...msg.parts] });
+      continue;
+    }
+    const lastMsg = alternatingMessages[alternatingMessages.length - 1];
+    if (lastMsg.role === msg.role) {
+      // Merge parts!
+      lastMsg.parts = [...lastMsg.parts, ...msg.parts];
+    } else {
+      alternatingMessages.push({ ...msg, parts: [...msg.parts] });
     }
   }
 
-  if (onStatusChange) onStatusChange('idle');
-  return generateLocalEmulationResponse(lastUserText, mode);
+  // 3. Slide the context window (limit to a clean, effective memory segment)
+  // Max conversation turns to keep: 16 messages (around 8 turns) preserves context beautifully and avoids loop piling.
+  const MAX_HISTORY_MESSAGES = 16;
+  let trimmedHistory = alternatingMessages;
+  if (trimmedHistory.length > MAX_HISTORY_MESSAGES) {
+    let startIndex = trimmedHistory.length - MAX_HISTORY_MESSAGES;
+    // Walk forward to ensure we always start with a user message
+    while (startIndex < trimmedHistory.length && trimmedHistory[startIndex].role !== 'user') {
+      startIndex++;
+    }
+    trimmedHistory = trimmedHistory.slice(startIndex);
+  }
+
+  return trimmedHistory;
+}
+
+async function streamLocalEmulationResponse(
+  fullResponse: string,
+  onChunk?: (chunk: string) => void
+): Promise<string> {
+  if (!onChunk) return fullResponse;
+  const tokens = fullResponse.split(/(\s+)/);
+  for (const token of tokens) {
+    onChunk(token);
+    await sleep(Math.floor(Math.random() * 8) + 5);
+  }
+  return fullResponse;
+}
+
+export async function kondaChat(
+  messages: { role: 'user' | 'model'; parts: any[] }[],
+  onStatusChange?: (status: ThinkingStatus) => void,
+  mode: 'intel' | 'casual' = 'intel',
+  onChunk?: (chunk: string) => void
+) {
+  const userMessages = messages.filter(m => m.role === 'user');
+  const lastUserMessage = userMessages[userMessages.length - 1];
+  let lastUserText = "";
+  if (lastUserMessage && lastUserMessage.parts) {
+    const textPart = lastUserMessage.parts.find(p => p.text);
+    if (textPart) lastUserText = textPart.text;
+  }
+
+  const currentSystemPrompt = mode === 'casual' ? CASUAL_PROMPT : SYSTEM_PROMPT;
+  const optimizedMessages = cleanAndOptimizeHistory(messages);
+
+  try {
+    if (onStatusChange) {
+      onStatusChange('thinking');
+    }
+
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: optimizedMessages,
+        mode,
+        systemPrompt: currentSystemPrompt,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Server returned status ${response.status}`);
+    }
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let accumulatedText = "";
+
+    if (reader) {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunkStr = decoder.decode(value, { stream: true });
+        accumulatedText += chunkStr;
+        if (onChunk) {
+          onChunk(chunkStr);
+        }
+      }
+    }
+
+    if (onStatusChange) onStatusChange('idle');
+    return accumulatedText || "I was unable to synchronize a coherent response.";
+  } catch (error) {
+    console.warn("[SYNC_UPLINK_OFFLINE] Routing directly to Local Cognition Core.", error);
+    if (onStatusChange) onStatusChange('idle');
+    const localResp = generateLocalEmulationResponse(lastUserText, mode);
+    return streamLocalEmulationResponse(localResp, onChunk);
+  }
+}
+
+export async function generateAIImage(
+  prompt: string,
+  aspectRatio: string = '1:1',
+  stylePreset: string = 'Realistic'
+): Promise<string> {
+  try {
+    const response = await fetch("/api/generate-image", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, aspectRatio }),
+    });
+    if (!response.ok) throw new Error("Backend error");
+    const data = await response.json();
+    if (data.output) return data.output;
+    throw new Error("No output returned");
+  } catch (error) {
+    console.error("[IMAGE_SYNTHESIS_FAILED] Falling back to high-quality visual simulation.", error);
+    return getRandomUnsplashImage(prompt, aspectRatio, stylePreset);
+  }
+}
+
+export async function editAIImage(
+  base64DataWithHeader: string,
+  prompt: string
+): Promise<string> {
+  return getRandomUnsplashImage(`Edited prompt: ${prompt}`);
+}
+
+function getRandomUnsplashImage(prompt: string, aspectRatio?: string, stylePreset?: string): string {
+  const keywords = encodeURIComponent(
+    prompt.split(' ')
+      .filter(w => w.length > 3)
+      .slice(0, 3)
+      .join(',') || 'creative,abstract'
+  );
+  
+  let size = 'w=800&h=800';
+  if (aspectRatio === '16:9') size = 'w=1200&h=675';
+  else if (aspectRatio === '9:16') size = 'w=675&h=1200';
+  else if (aspectRatio === '4:3') size = 'w=1024&h=768';
+  else if (aspectRatio === '3:4') size = 'w=768&h=1024';
+
+  return `https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?q=80&${size}&auto=format&fit=crop&sig=${Math.floor(Math.random() * 100000)}&q=${keywords}`;
 }

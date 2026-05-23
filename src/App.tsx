@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import KosmosModule from './components/KosmosModule';
 import CommandCenter from './components/CommandCenter';
@@ -10,7 +10,7 @@ import MemoryModule from './components/MemoryModule';
 import ShortcutManager from './components/ShortcutManager';
 import { useShortcuts } from './hooks/useShortcuts';
 import { useAdaptiveLearning } from './hooks/useAdaptiveLearning';
-import { ModuleId, OSState, Message, Shortcut, ProficiencyScore, ThinkingStatus } from './types';
+import { ModuleId, OSState, Message, Shortcut, ProficiencyScore, ThinkingStatus, FileAttachment } from './types';
 import { kondaChat } from './services/kondaService';
 import { generateId, cn } from './lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -27,6 +27,9 @@ export default function App() {
       proficiency: []
     };
   });
+
+  const isGeneratingRef = useRef<boolean>(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setState(s => ({ ...s, proficiency }));
@@ -226,7 +229,7 @@ export default function App() {
     }
   };
 
-  const handleSendMessage = useCallback(async (content: string) => {
+  const handleSendMessage = useCallback(async (content: string, files?: FileAttachment[]) => {
     const trimmed = content.trim().toLowerCase();
     
     // Intercept clear commands
@@ -235,41 +238,144 @@ export default function App() {
       return;
     }
 
+    // 1. Prevent multiple active streaming sessions & handle abort
+    if (isGeneratingRef.current) {
+      abortControllerRef.current?.abort();
+      isGeneratingRef.current = false;
+    }
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    isGeneratingRef.current = true;
+
+    const userMsgId = generateId();
+    const assistantMsgId = generateId();
+
     const userMessage: Message = {
-      id: generateId(),
+      id: userMsgId,
       role: 'user',
       content,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      files
     };
 
+    const assistantMessage: Message = {
+      id: assistantMsgId,
+      role: 'assistant',
+      content: "",
+      timestamp: Date.now() + 1
+    };
+
+    // Inject both user and assistant placeholder messages in a single atomic update.
+    // This clears any previous response state directly before starting generation.
     setState(s => ({
       ...s,
-      messages: [...s.messages, userMessage],
+      messages: [...s.messages, userMessage, assistantMessage],
       thinkingStatus: 'thinking'
     }));
 
-    const chatHistory: { role: 'user' | 'model'; parts: { text: string }[] }[] = [...state.messages, userMessage].map(m => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }]
-    }));
+    // Build the clean, duplicate-free history mapping.
+    // Filter out messages with empty content or thinking indicators to keep the context window perfectly optimized.
+    const validHistory = state.messages.filter(m => {
+      if (m.role === 'assistant' && !m.content.trim()) return false;
+      return true;
+    });
+
+    const chatHistory = [...validHistory, userMessage].map(m => {
+      const parts: any[] = [];
+      
+      // Add files if present
+      if (m.files && m.files.length > 0) {
+        for (const file of m.files) {
+          if (file.textContent) {
+            parts.push({
+              text: `=== ATTACHMENT: ${file.name} ===\n${file.textContent}\n=== END OF ATTACHMENT ===`
+            });
+          } else if (file.base64) {
+            parts.push({
+              inlineData: {
+                mimeType: file.type,
+                data: file.base64
+              }
+            });
+          }
+        }
+      }
+      
+      // Always add the text part
+      parts.push({ text: m.content });
+
+      return {
+        role: m.role === 'assistant' ? ('model' as const) : ('user' as const),
+        parts
+      };
+    });
 
     const mode = state.currentModule === 'casual' ? 'casual' : 'intel';
-    const response = await kondaChat(chatHistory, (status) => {
-      setState(s => ({ ...s, thinkingStatus: status }));
-    }, mode);
+    let fullText = "";
 
-    const assistantMessage: Message = {
-      id: generateId(),
-      role: 'assistant',
-      content: response,
-      timestamp: Date.now()
-    };
+    try {
+      const response = await kondaChat(
+        chatHistory,
+        (status) => {
+          if (controller.signal.aborted) return;
+          setState(s => ({ ...s, thinkingStatus: status }));
+        },
+        mode,
+        (chunk) => {
+          if (controller.signal.aborted) return;
+          fullText += chunk;
+          setState(s => {
+            const updated = s.messages.map(m => {
+              if (m.id === assistantMsgId) {
+                return { ...m, content: fullText };
+              }
+              return m;
+            });
+            return { ...s, messages: updated };
+          });
+        }
+      );
 
-    setState(s => ({
-      ...s,
-      messages: [...s.messages, assistantMessage],
-      thinkingStatus: 'idle'
-    }));
+      if (controller.signal.aborted) return;
+
+      // Ensure stable final output update and set target state to idle
+      setState(s => {
+        const updated = s.messages.map(m => {
+          if (m.id === assistantMsgId) {
+            return { ...m, content: response || fullText };
+          }
+          return m;
+        });
+        return {
+          ...s,
+          messages: updated,
+          thinkingStatus: 'idle'
+        };
+      });
+    } catch (err) {
+      console.error("[STREAM_PIPELINE_ERROR]", err);
+      if (controller.signal.aborted) return;
+
+      setState(s => {
+        const updated = s.messages.map(m => {
+          if (m.id === assistantMsgId) {
+            return { ...m, content: "Neural sync encountered an unexpected operational failure." };
+          }
+          return m;
+        });
+        return {
+          ...s,
+          messages: updated,
+          thinkingStatus: 'idle'
+        };
+      });
+    } finally {
+      if (abortControllerRef.current === controller) {
+        isGeneratingRef.current = false;
+        abortControllerRef.current = null;
+      }
+    }
   }, [state.messages, state.currentModule, handleClearChat]);
 
   return (
@@ -431,7 +537,7 @@ export default function App() {
 function ModuleSelector({ moduleId, messages, onSendMessage, onClearChat, onArchiveChat, thinkingStatus, proficiency, recommendations, onSwitchModule }: { 
   moduleId: ModuleId, 
   messages: Message[],
-  onSendMessage: (val: string) => void,
+  onSendMessage: (val: string, files?: FileAttachment[]) => void,
   onClearChat: () => void,
   onArchiveChat: () => void,
   thinkingStatus: ThinkingStatus,

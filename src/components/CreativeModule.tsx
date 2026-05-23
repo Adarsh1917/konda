@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Layers, Box, Maximize, Palette, Sparkles, Image as ImageIcon, Download, Copy, Loader2, Send, Upload, Wand2 } from 'lucide-react';
+import { Layers, Box, Maximize, Palette, Sparkles, Image as ImageIcon, Download, Copy, Loader2, Send, Upload, Wand2, RefreshCcw } from 'lucide-react';
 import { cn, generateId } from '../lib/utils';
+import { generateAIImage, editAIImage } from '../services/kondaService';
 
 interface Asset {
   id: string;
   url: string;
   prompt: string;
   timestamp: string;
+  originalUrl?: string; // Storing original base image for Before/After compare
 }
 
 export default function CreativeModule() {
@@ -18,6 +20,9 @@ export default function CreativeModule() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [activeTab, setActiveTab] = useState<'synthesis' | 'edit'>('synthesis');
   const [editImage, setEditImage] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [sliderPos, setSliderPos] = useState(50);
+  const containerRef = useRef<HTMLDivElement>(null);
   
   const [assets, setAssets] = useState<Asset[]>(() => {
     const saved = localStorage.getItem('konda_creative_assets');
@@ -61,38 +66,47 @@ export default function CreativeModule() {
   const importInputRef = React.useRef<HTMLInputElement>(null);
   const editInputRef = React.useRef<HTMLInputElement>(null);
 
-  const handleGenerate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!prompt.trim() || isGenerating) return;
-
-    setIsGenerating(true);
-    // Mimic generation latency
-    setTimeout(() => {
-      const now = new Date();
-      const newAsset: Asset = {
-        id: generateId(),
-        url: `https://images.unsplash.com/photo-${1600000000000 + Math.floor(Math.random() * 100000000)}?auto=format&fit=crop&w=800&q=80`,
-        prompt: activeTab === 'edit' 
-          ? `Modified: ${prompt} (Based on uploaded blueprint)` 
-          : `${stylePreset}: ${prompt}${negativePrompt ? ` [Negative: ${negativePrompt}]` : ''} (${aspectRatio})`,
-        timestamp: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-      };
-      setAssets(prev => [newAsset, ...prev]);
-      setActiveAsset(newAsset);
-      setPrompt('');
-      if (activeTab === 'synthesis') setNegativePrompt('');
-      setIsGenerating(false);
-      if (activeTab === 'edit') setEditImage(null);
-    }, 2500);
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100));
+    setSliderPos(percentage);
   };
 
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>, forEdit: boolean = false) => {
-    const file = e.target.files?.[0];
-    if (file) {
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!containerRef.current || !e.touches[0]) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = e.touches[0].clientX - rect.left;
+    const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100));
+    setSliderPos(percentage);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent, forEdit: boolean = false) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.type.startsWith('image/')) {
       const url = URL.createObjectURL(file);
       createdUrls.current.add(url);
+      
       if (forEdit) {
-        setEditImage(url);
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          if (event.target?.result) {
+            setEditImage(event.target.result as string);
+          }
+        };
+        reader.readAsDataURL(file);
       } else {
         const now = new Date();
         const newAsset: Asset = {
@@ -105,6 +119,121 @@ export default function CreativeModule() {
         setActiveAsset(newAsset);
       }
     }
+  };
+
+  const handleGenerate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!prompt.trim() || isGenerating) return;
+
+    setIsGenerating(true);
+    try {
+      const now = new Date();
+      let generatedUrl = '';
+      
+      if (activeTab === 'synthesis') {
+        generatedUrl = await generateAIImage(prompt, aspectRatio, stylePreset);
+      } else {
+        if (!editImage) throw new Error("No edit base image loaded");
+        generatedUrl = await editAIImage(editImage, prompt);
+      }
+
+      const newAsset: Asset = {
+        id: generateId(),
+        url: generatedUrl,
+        prompt: activeTab === 'edit' 
+          ? `Modified: ${prompt} (Based on uploaded blueprint)` 
+          : `${stylePreset}: ${prompt}${negativePrompt ? ` [Negative: ${negativePrompt}]` : ''} (${aspectRatio})`,
+        timestamp: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        originalUrl: activeTab === 'edit' ? editImage || undefined : undefined
+      };
+      
+      setAssets(prev => [newAsset, ...prev]);
+      setActiveAsset(newAsset);
+      setPrompt('');
+      if (activeTab === 'synthesis') setNegativePrompt('');
+    } catch (err) {
+      console.error("[IMAGE_GENERATION_FAILED_OUTER] Error compiling dynamic assets", err);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleRegenerateVariation = async (asset: Asset) => {
+    if (isGenerating) return;
+    setIsGenerating(true);
+    
+    try {
+      const now = new Date();
+      const originalPrompt = asset.prompt.includes(': ') ? asset.prompt.split(': ').slice(1).join(': ') : asset.prompt;
+      
+      const variationPrompts = [
+        "A slightly different angle and creative lighting of: ",
+        "A new aesthetic variation with alternative textures of: ",
+        "Different color palette adjustment of: ",
+        "A polished and newly stylized variation of: "
+      ];
+      const selectedPrefix = variationPrompts[Math.floor(Math.random() * variationPrompts.length)];
+      const fullPromptForGen = `${selectedPrefix}${originalPrompt}`;
+      
+      let generatedUrl = '';
+      if (asset.originalUrl) {
+        generatedUrl = await editAIImage(asset.originalUrl, fullPromptForGen);
+      } else {
+        generatedUrl = await generateAIImage(fullPromptForGen, aspectRatio, stylePreset);
+      }
+
+      const newAsset: Asset = {
+        id: generateId(),
+        url: generatedUrl,
+        prompt: `Variation of: ${originalPrompt}`,
+        timestamp: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        originalUrl: asset.originalUrl
+      };
+
+      setAssets(prev => [newAsset, ...prev]);
+      setActiveAsset(newAsset);
+    } catch (err) {
+      console.error("[VARIATION_GENERATION_FAILED] Could not synthesize asset variation", err);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>, forEdit: boolean = false) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const url = URL.createObjectURL(file);
+      createdUrls.current.add(url);
+      
+      if (forEdit) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          if (event.target?.result) {
+            setEditImage(event.target.result as string);
+          }
+        };
+        reader.readAsDataURL(file);
+      } else {
+        const now = new Date();
+        const newAsset: Asset = {
+          id: generateId(),
+          url: url,
+          prompt: `Imported Asset: ${file.name}`,
+          timestamp: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        };
+        setAssets(prev => [newAsset, ...prev]);
+        setActiveAsset(newAsset);
+      }
+    }
+  };
+
+  const downloadImage = (url: string, filename: string) => {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const stylePresets = ['Realistic', 'Cinematic', 'Anime', 'Illustration', 'Cyberpunk', 'Minimalist'];
@@ -269,10 +398,20 @@ export default function CreativeModule() {
                       {!editImage ? (
                         <button 
                           onClick={() => editInputRef.current?.click()}
-                          className="w-full aspect-video border border-dashed border-white/10 rounded-lg flex flex-col items-center justify-center gap-2 hover:border-[#FF3E00]/40 transition-all bg-white/[0.02]"
+                          onDragOver={handleDragOver}
+                          onDragLeave={handleDragLeave}
+                          onDrop={(e) => handleDrop(e, true)}
+                          className={cn(
+                            "w-full aspect-video border border-dashed rounded-lg flex flex-col items-center justify-center gap-2 transition-all bg-white/[0.02] cursor-pointer",
+                            isDragging 
+                              ? "border-[#FF3E00] text-[#FF3E00] bg-[#FF3E00]/5 scale-[1.02]" 
+                              : "border-white/10 text-white/20 hover:border-[#FF3E00]/40"
+                          )}
                         >
-                          <Upload className="w-6 h-6 text-white/20" />
-                          <span className="text-[9px] font-mono text-white/20 uppercase">Load_Base_Layer</span>
+                          <Upload className="w-6 h-6" />
+                          <span className="text-[9px] font-mono uppercase">
+                            {isDragging ? "Drop_Blueprint_Here" : "Load_Or_Drop_Base_Layer"}
+                          </span>
                         </button>
                       ) : (
                         <div className="relative aspect-video rounded-lg overflow-hidden border border-white/10">
@@ -293,15 +432,59 @@ export default function CreativeModule() {
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
                         placeholder="e.g. Change background to cyberpunk neon city, make it 8-bit style..."
-                        className="w-full bg-black/40 border border-white/5 p-4 text-sm font-light min-h-[120px] focus:outline-none focus:border-[#FF3E00]/50 transition-all resize-none placeholder:text-white/10"
+                        className="w-full bg-black/40 border border-white/5 p-4 text-sm font-light min-h-[120px] focus:outline-none focus:border-[#FF3E00]/50 transition-all resize-none placeholder:text-white/10 text-[#F5F5F5]"
                       />
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
-                      <button className="py-3 px-2 border border-white/5 bg-white/[0.02] text-[8px] font-mono uppercase tracking-widest text-white/40 hover:text-white/80 transition-all">Background_Swap</button>
-                      <button className="py-3 px-2 border border-white/5 bg-white/[0.02] text-[8px] font-mono uppercase tracking-widest text-white/40 hover:text-white/80 transition-all">Style_Transfer</button>
-                      <button className="py-3 px-2 border border-white/5 bg-white/[0.02] text-[8px] font-mono uppercase tracking-widest text-white/40 hover:text-white/80 transition-all">Element_Removal</button>
-                      <button className="py-3 px-2 border border-white/5 bg-white/[0.02] text-[8px] font-mono uppercase tracking-widest text-white/40 hover:text-white/80 transition-all">Enhance_Detail</button>
+                      <button 
+                        type="button"
+                        onClick={() => setPrompt("Swap the background to [describe scene, e.g. a minimalist studio background with soft warm spotlight]")}
+                        className="py-3 px-2 border border-white/5 bg-white/[0.02] text-[8px] font-mono uppercase tracking-widest text-[#FF3E00]/80 hover:text-white hover:border-[#FF3E00]/30 hover:bg-[#FF3E00]/10 transition-all text-left truncate"
+                        title="Background Swap Preset"
+                      >
+                        Background_Swap
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => setPrompt("Transform the style of this image to [describe artistic style, e.g. futuristic cyberpunk flat illustration]")}
+                        className="py-3 px-2 border border-white/5 bg-white/[0.02] text-[8px] font-mono uppercase tracking-widest text-[#FF3E00]/80 hover:text-white hover:border-[#FF3E00]/30 hover:bg-[#FF3E00]/10 transition-all text-left truncate"
+                        title="Style Transfer Preset"
+                      >
+                        Style_Transfer
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => setPrompt("Remove the [specify elements to delete, e.g. water bottle and wires] from the image")}
+                        className="py-3 px-2 border border-white/5 bg-white/[0.02] text-[8px] font-mono uppercase tracking-widest text-[#FF3E00]/80 hover:text-white hover:border-[#FF3E00]/30 hover:bg-[#FF3E00]/10 transition-all text-left truncate"
+                        title="Element Removal Preset"
+                      >
+                        Element_Removal
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => setPrompt("Enhance image quality, sharpen details, adjust brightness, render realistic raytracing")}
+                        className="py-3 px-2 border border-white/5 bg-white/[0.02] text-[8px] font-mono uppercase tracking-widest text-[#FF3E00]/80 hover:text-white hover:border-[#FF3E00]/30 hover:bg-[#FF3E00]/10 transition-all text-left truncate"
+                        title="Enhance Detail Preset"
+                      >
+                        Enhance_Detail
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => setPrompt("Replace [original object] in this image with [new object, e.g. replace standard mug with futuristic copper cup]")}
+                        className="py-3 px-2 border border-white/5 bg-white/[0.02] text-[8px] font-mono uppercase tracking-widest text-[#F5F5F5]/40 hover:text-white hover:border-[#FF3E00]/30 hover:bg-[#FF3E00]/10 transition-all text-left truncate"
+                        title="Object Replace Preset"
+                      >
+                        Object_Replace
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => setPrompt("Expand borders of this image and outpaint the scene with [describe surroundings, e.g. tech warehouse]")}
+                        className="py-3 px-2 border border-white/5 bg-white/[0.02] text-[8px] font-mono uppercase tracking-widest text-[#F5F5F5]/40 hover:text-white hover:border-[#FF3E00]/30 hover:bg-[#FF3E00]/10 transition-all text-left truncate"
+                        title="Scene Outpainting Preset"
+                      >
+                        Outpainting
+                      </button>
                     </div>
 
                     <button 
@@ -362,33 +545,119 @@ export default function CreativeModule() {
         {/* Preview Area */}
         <div className="lg:col-span-8 space-y-8">
           <div className="aspect-video lg:aspect-auto lg:h-[500px] border border-[#1A1A1A] bg-[#050505] relative overflow-hidden group">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeAsset.id}
-                initial={{ opacity: 0, scale: 1.05 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 1 }}
-                className="absolute inset-0"
+            {activeAsset.originalUrl ? (
+              <div 
+                ref={containerRef}
+                onMouseMove={handleMouseMove}
+                onTouchMove={handleTouchMove}
+                className="absolute inset-0 cursor-ew-resize select-none overflow-hidden"
               >
+                {/* Back Layer: Edited Image ("After") */}
                 <img 
                   src={activeAsset.url} 
-                  alt="preview" 
-                  className="w-full h-full object-cover"
+                  alt="edited asset" 
+                  className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                  referrerPolicy="no-referrer"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-60" />
-              </motion.div>
-            </AnimatePresence>
+                
+                {/* Clipped Top Layer: Original Image ("Before") */}
+                <div 
+                  className="absolute inset-0 overflow-hidden pointer-events-none z-10"
+                  style={{ clipPath: `polygon(0 0, ${sliderPos}% 0, ${sliderPos}% 100%, 0 100%)` }}
+                >
+                  <img 
+                    src={activeAsset.originalUrl} 
+                    alt="original blueprint" 
+                    className="absolute inset-0 w-full h-full object-cover pointer-events-none grayscale"
+                    referrerPolicy="no-referrer"
+                  />
+                  {/* Label: Before */}
+                  <div className="absolute top-4 left-4 px-3 py-1 bg-black/60 backdrop-blur-md border border-white/5 text-[8px] font-mono uppercase tracking-widest text-white/50 z-20">
+                    Original Base
+                  </div>
+                </div>
+
+                {/* Label: After */}
+                <div className="absolute top-4 right-4 px-3 py-1 bg-[#FF3E00]/20 backdrop-blur-md border border-[#FF3E00]/30 text-[8px] font-mono uppercase tracking-widest text-[#FF3E00] z-20">
+                  AI Edit Manifest
+                </div>
+
+                {/* Vertical Slider Handle Indicator */}
+                <div 
+                  className="absolute inset-y-0 w-[1px] bg-[#FF3E00] z-20 pointer-events-none"
+                  style={{ left: `${sliderPos}%` }}
+                >
+                  <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-black border border-[#FF3E00] flex items-center justify-center font-mono text-[8px] font-bold text-[#FF3E00] shadow-[0_0_8px_rgba(255,62,0,0.6)] select-none">
+                    ↔
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeAsset.id}
+                  initial={{ opacity: 0, scale: 1.05 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 1 }}
+                  className="absolute inset-0"
+                >
+                  <img 
+                    src={activeAsset.url} 
+                    alt="preview" 
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-60" />
+                </motion.div>
+              </AnimatePresence>
+            )}
 
             {/* UI Overlays */}
             <div className="absolute top-0 left-0 p-8 flex items-center gap-4 z-10">
                <div className="w-2 h-2 rounded-full bg-[#FF3E00] animate-pulse" />
-               <span className="text-[10px] font-mono tracking-widest text-white/40 uppercase">Live_Synthesis_v4.2</span>
+               <span className="text-[10px] font-mono tracking-widest text-white/40 uppercase">
+                 {activeAsset.originalUrl ? 'Before_After_Comparison' : 'Live_Synthesis_v4.2'}
+               </span>
             </div>
 
             <div className="absolute top-0 right-0 p-8 flex gap-4 z-10">
-               <button className="p-3 bg-black/40 backdrop-blur-md border border-white/10 text-white/60 hover:text-[#FF3E00] transition-colors"><Maximize className="w-4 h-4" /></button>
-               <button className="p-3 bg-black/40 backdrop-blur-md border border-white/10 text-white/60 hover:text-[#FF3E00] transition-colors"><Download className="w-4 h-4" /></button>
+               <button 
+                 title="Generate Variation of this Asset"
+                 onClick={() => handleRegenerateVariation(activeAsset)}
+                 className="p-3 bg-black/40 backdrop-blur-md border border-white/10 text-white/60 hover:text-[#FF3E00] transition-colors"
+               >
+                 <RefreshCcw className="w-4 h-4" />
+               </button>
+               <button 
+                 title="Use as Edit Base Layer"
+                 onClick={() => {
+                   setEditImage(activeAsset.url);
+                   setActiveTab('edit');
+                 }}
+                 className="p-3 bg-black/40 backdrop-blur-md border border-white/10 text-white/60 hover:text-[#FF3E00] transition-colors"
+               >
+                 <Layers className="w-4 h-4" />
+               </button>
+               <button 
+                 title="Open in new window"
+                 onClick={() => {
+                   const win = window.open();
+                   if (win) {
+                     win.document.write(`<iframe src="${activeAsset.url}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
+                   }
+                 }}
+                 className="p-3 bg-black/40 backdrop-blur-md border border-white/10 text-white/60 hover:text-[#FF3E00] transition-colors"
+               >
+                 <Maximize className="w-4 h-4" />
+               </button>
+               <button 
+                 title="Download this asset"
+                 onClick={() => downloadImage(activeAsset.url, `konda_creative_image-${activeAsset.id}.png`)}
+                 className="p-3 bg-black/40 backdrop-blur-md border border-white/10 text-white/60 hover:text-[#FF3E00] transition-colors"
+               >
+                 <Download className="w-4 h-4" />
+               </button>
             </div>
 
             <div className="absolute bottom-0 left-0 p-8 z-10 w-full max-w-xl">
