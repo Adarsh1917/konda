@@ -3,9 +3,13 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   GraduationCap, BookOpen, Brain, Award, Play, Pause, RefreshCcw, 
   Sparkles, CheckCircle2, XCircle, ArrowRight, ClipboardList, HelpCircle, 
-  Activity, Star, Flame, Calendar, Map, Check, ChevronDown, ChevronUp, FileText, Send
+  Activity, Star, Flame, Calendar, Map, Check, ChevronDown, ChevronUp, FileText, Send,
+  TrendingUp, Clock, Target, BarChart2
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { 
+  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, Legend, BarChart, Bar
+} from 'recharts';
 
 interface MCQQuestion {
   id: string;
@@ -31,7 +35,41 @@ interface SyllabusChapter {
 }
 
 export default function AcademiaModule() {
-  const [activeTab, setActiveTab] = useState<'revision' | 'quiz' | 'viva' | 'formula'>('revision');
+  const [activeTab, setActiveTab] = useState<'revision' | 'quiz' | 'viva' | 'formula' | 'trends'>('revision');
+
+  // TREND GENERATION / LOG STATE
+  const [trendsData, setTrendsData] = useState<Record<string, { date: string; score: number; target: number; avgTime: number }[]>>({
+    'Computer Science (Algorithms)': [
+      { date: 'Week 1', score: 68, target: 80, avgTime: 4.5 },
+      { date: 'Week 2', score: 72, target: 80, avgTime: 5.0 },
+      { date: 'Week 3', score: 85, target: 85, avgTime: 6.2 },
+      { date: 'Week 4', score: 78, target: 85, avgTime: 5.8 },
+      { date: 'Week 5', score: 92, target: 90, avgTime: 7.0 },
+      { date: 'Week 6', score: 95, target: 90, avgTime: 8.5 }
+    ],
+    'Human Medicine (Biochemistry)': [
+      { date: 'Week 1', score: 55, target: 75, avgTime: 6.0 },
+      { date: 'Week 2', score: 64, target: 75, avgTime: 6.5 },
+      { date: 'Week 3', score: 70, target: 80, avgTime: 7.2 },
+      { date: 'Week 4', score: 78, target: 80, avgTime: 8.0 },
+      { date: 'Week 5', score: 82, target: 85, avgTime: 9.5 },
+      { date: 'Week 6', score: 88, target: 85, avgTime: 10.0 }
+    ],
+    'Engineering Mechanics (Dynamics)': [
+      { date: 'Week 1', score: 60, target: 70, avgTime: 3.5 },
+      { date: 'Week 2', score: 68, target: 75, avgTime: 4.0 },
+      { date: 'Week 3', score: 74, target: 75, avgTime: 5.0 },
+      { date: 'Week 4', score: 70, target: 75, avgTime: 4.5 },
+      { date: 'Week 5', score: 81, target: 80, avgTime: 6.0 },
+      { date: 'Week 6', score: 85, target: 80, avgTime: 7.5 }
+    ]
+  });
+
+  const [chartMetric, setChartMetric] = useState<'scores' | 'effort'>('scores');
+  const [logLabel, setLogLabel] = useState('Week 7');
+  const [logScore, setLogScore] = useState(88);
+  const [logTarget, setLogTarget] = useState(90);
+  const [logHrs, setLogHrs] = useState(7.0);
   const [selectedSubject, setSelectedSubject] = useState('Computer Science (Algorithms)');
   const [difficulty, setDifficulty] = useState<'beginner' | 'intermediate' | 'advanced'>('intermediate');
   const [isLoading, setIsLoading] = useState(false);
@@ -409,7 +447,8 @@ export default function AcademiaModule() {
           { id: 'revision', label: 'revision_matrix', icon: Calendar },
           { id: 'quiz', label: 'quiz_flashcards', icon: Brain },
           { id: 'viva', label: 'viva_simulation', icon: Play },
-          { id: 'formula', label: 'formula_sheets', icon: BookOpen }
+          { id: 'formula', label: 'formula_sheets', icon: BookOpen },
+          { id: 'trends', label: 'progress_trends', icon: Activity }
         ] as const).map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -833,7 +872,7 @@ export default function AcademiaModule() {
                 </motion.div>
               )}
             </motion.div>
-          ) : (
+          ) : activeTab === 'formula' ? (
             <motion.div 
               key="formula"
               initial={{ opacity: 0, y: 10 }}
@@ -876,6 +915,301 @@ export default function AcademiaModule() {
                     </button>
                   </div>
                 ))}
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div 
+              key="trends"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-8"
+            >
+              {/* Introduction Card */}
+              <div className="p-5 border border-[#FF3E00]/10 bg-[#FF3E00]/[0.02] rounded-md flex flex-col md:flex-row items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-sm font-semibold tracking-tight text-[#FF3E00] flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 shadow-[0_0_8px_rgba(255,62,0,0.5)]" /> Real-time Progress Tracking
+                  </h3>
+                  <p className="text-[12px] text-white/50 mt-1 leading-relaxed max-w-2xl">
+                    Visualize score progress, study hour investment, and performance metrics dynamically. Model thresholds adapt automatically to match subject intensity constraints.
+                  </p>
+                </div>
+              </div>
+
+              {/* Dynamic Metrics Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                {(() => {
+                  const currentTrends = trendsData[selectedSubject] || [];
+                  const avgScore = currentTrends.length 
+                    ? Math.round(currentTrends.reduce((sum, item) => sum + item.score, 0) / currentTrends.length)
+                    : 0;
+                  const maxScore = currentTrends.length
+                    ? Math.max(...currentTrends.map(item => item.score))
+                    : 0;
+                  const totalEffort = currentTrends.length
+                    ? parseFloat((currentTrends.reduce((sum, item) => sum + item.avgTime, 0)).toFixed(1))
+                    : 0;
+                  
+                  return (
+                    <>
+                      <div className="p-4 border border-white/5 bg-[#08080C] rounded-sm flex items-center justify-between gap-4 shadow-[0_3px_10px_rgba(0,0,0,0.4)]">
+                        <div className="space-y-1">
+                          <span className="text-[8px] font-mono uppercase tracking-[0.1em] text-white/40 block">Average Mastery</span>
+                          <span className="text-xl font-light text-white font-mono">{avgScore}%</span>
+                          <span className="text-[9px] text-white/30 block">Target Threshold is 80%</span>
+                        </div>
+                        <div className="w-10 h-10 border border-[#FF3E00]/10 bg-[#FF3E00]/5 flex items-center justify-center rounded-sm text-[#FF3E00]">
+                          <Award className="w-5 h-5" />
+                        </div>
+                      </div>
+
+                      <div className="p-4 border border-white/5 bg-[#08080C] rounded-sm flex items-center justify-between gap-4 shadow-[0_3px_10px_rgba(0,0,0,0.4)]">
+                        <div className="space-y-1">
+                          <span className="text-[8px] font-mono uppercase tracking-[0.1em] text-white/40 block">Peak Performance</span>
+                          <span className="text-xl font-light text-white font-mono">{maxScore}%</span>
+                          <span className="text-[9px] text-emerald-400 block font-mono">+{maxScore - avgScore}% deviation</span>
+                        </div>
+                        <div className="w-10 h-10 border border-[#FF3E00]/10 bg-[#FF3E00]/5 flex items-center justify-center rounded-sm text-[#FF3E00]">
+                          <Flame className="w-5 h-5" />
+                        </div>
+                      </div>
+
+                      <div className="p-4 border border-white/5 bg-[#08080C] rounded-sm flex items-center justify-between gap-4 shadow-[0_3px_10px_rgba(0,0,0,0.4)]">
+                        <div className="space-y-1">
+                          <span className="text-[8px] font-mono uppercase tracking-[0.1em] text-white/40 block">Study Focus Effort</span>
+                          <span className="text-xl font-light text-white font-mono">{totalEffort} hrs</span>
+                          <span className="text-[9px] text-white/30 block">Across {currentTrends.length} logs recorded</span>
+                        </div>
+                        <div className="w-10 h-10 border border-[#FF3E00]/10 bg-[#FF3E00]/5 flex items-center justify-center rounded-sm text-[#FF3E00]">
+                          <Clock className="w-5 h-5" />
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+
+              {/* Main Visualization Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                {/* Visual Analytics Block */}
+                <div className="lg:col-span-2 p-5 border border-white/5 bg-[#08080C] rounded-sm space-y-6">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div>
+                      <span className="text-[9px] font-mono tracking-widest uppercase text-[#FF3E00] block mb-1">
+                        {chartMetric === 'scores' ? 'Mastery & Objectives Evolution' : 'Study Engagement Effort'}
+                      </span>
+                      <h4 className="text-xs font-semibold uppercase font-mono tracking-wider text-white">
+                        Holographic Analytics Matrix
+                      </h4>
+                    </div>
+
+                    {/* Chart Selector togglers */}
+                    <div className="flex border border-[#222] bg-black/60 rounded-sm overflow-hidden text-[9px] font-mono select-none self-end sm:self-auto">
+                      <button
+                        onClick={() => setChartMetric('scores')}
+                        className={cn(
+                          "px-3 py-1.5 uppercase transition-colors hover:text-[#FF3E00] cursor-pointer",
+                          chartMetric === 'scores' ? "bg-[#FF3E00]/10 text-[#FF3E00] font-bold" : "text-white/40"
+                        )}
+                      >
+                        Scores Trend
+                      </button>
+                      <button
+                        onClick={() => setChartMetric('effort')}
+                        className={cn(
+                          "px-3 py-1.5 uppercase transition-colors hover:text-[#FF3E00] cursor-pointer border-l border-[#222]",
+                          chartMetric === 'effort' ? "bg-[#FF3E00]/10 text-[#FF3E00] font-bold" : "text-white/40"
+                        )}
+                      >
+                        Study Hours
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Graphic stage */}
+                  <div className="w-full bg-[#030303]/40 border border-white/[0.02] rounded p-4 relative min-h-[340px] flex items-center justify-center">
+                    {(() => {
+                      const data = trendsData[selectedSubject] || [];
+                      if (data.length === 0) {
+                        return (
+                          <div className="text-center py-10 text-[10px] font-mono text-white/30 uppercase tracking-[0.2em]">
+                            No diagnostic evaluation sequences saved.
+                          </div>
+                        );
+                      }
+
+                      // Dynamic styling for tooltip
+                      const CustomTooltip = ({ active, payload, label }: any) => {
+                        if (active && payload && payload.length) {
+                          return (
+                            <div className="bg-[#0b0c10] border border-white/10 p-3.5 rounded shadow-2xl font-mono text-[10px] space-y-2 backdrop-blur-md animate-fade-in">
+                              <p className="text-white/40 uppercase tracking-widest text-[8.5px] border-b border-white/5 pb-1 mb-1 font-bold">{label}</p>
+                              <div className="space-y-1">
+                                {payload.map((pld: any, idx: number) => {
+                                  const isHrs = pld.dataKey === 'avgTime';
+                                  const unit = isHrs ? ' hrs' : '%';
+                                  return (
+                                    <div key={idx} className="flex justify-between items-center gap-6">
+                                      <span className="capitalize" style={{ color: pld.color }}>{pld.name}:</span>
+                                      <span className="font-bold text-[#F5F5F5]">{pld.value}{unit}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      };
+
+                      return (
+                        <div className="w-full h-[300px]">
+                          {chartMetric === 'scores' ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                              <AreaChart data={data} margin={{ top: 12, right: 12, left: -24, bottom: 0 }}>
+                                <defs>
+                                  <linearGradient id="scoreGlow" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#FF3E00" stopOpacity={0.35}/>
+                                    <stop offset="95%" stopColor="#FF3E00" stopOpacity={0.0}/>
+                                  </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#16161a" vertical={false} />
+                                <XAxis dataKey="date" stroke="#444" tick={{ fill: '#666', fontSize: 9, fontFamily: 'monospace' }} dy={10} tickLine={false} />
+                                <YAxis domain={[0, 100]} stroke="#444" tick={{ fill: '#666', fontSize: 9, fontFamily: 'monospace' }} dx={-10} tickLine={false} />
+                                <Tooltip content={<CustomTooltip />} />
+                                <Legend verticalAlign="top" height={32} iconType="circle" wrapperStyle={{ fontSize: '9px', fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.1em' }} />
+                                <Area type="monotone" dataKey="score" name="Mastery Score" stroke="#FF3E00" strokeWidth={1.5} fillOpacity={1} fill="url(#scoreGlow)" activeDot={{ r: 4, stroke: '#FF3E00', strokeWidth: 1 }} />
+                                <Area type="monotone" dataKey="target" name="Target Matrix" stroke="#444" strokeWidth={1.5} fill="none" strokeDasharray="4 4" dot={false} activeDot={false} />
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          ) : (
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={data} margin={{ top: 12, right: 12, left: -24, bottom: 0 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#16161a" vertical={false} />
+                                <XAxis dataKey="date" stroke="#444" tick={{ fill: '#666', fontSize: 9, fontFamily: 'monospace' }} dy={10} tickLine={false} />
+                                <YAxis stroke="#444" tick={{ fill: '#666', fontSize: 9, fontFamily: 'monospace' }} dx={-10} tickLine={false} />
+                                <Tooltip content={<CustomTooltip />} />
+                                <Legend verticalAlign="top" height={32} iconType="circle" wrapperStyle={{ fontSize: '9px', fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.1em' }} />
+                                <Bar dataKey="avgTime" name="Study Commitment (Hrs)" fill="#FF3E00" radius={[2, 2, 0, 0]} opacity={0.65} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* Score logger control console */}
+                <div className="p-5 border border-white/5 bg-[#08080C] rounded-sm space-y-4">
+                  <div>
+                    <span className="text-[8px] font-mono uppercase tracking-[0.2em] text-[#FF3E00] block mb-1">
+                      Interactive Sequence Logs
+                    </span>
+                    <h4 className="text-xs font-semibold text-white uppercase font-mono tracking-wider">
+                      Register Practice Score
+                    </h4>
+                  </div>
+                  
+                  <div className="space-y-4 text-xs">
+                    {/* Period Name input */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-mono text-white/40 uppercase block">Assessment Period label</label>
+                      <input 
+                        type="text" 
+                        value={logLabel}
+                        onChange={(e) => setLogLabel(e.target.value)}
+                        placeholder="Week 7"
+                        className="w-full bg-black border border-white/5 rounded px-3 py-2 text-white font-sans focus:border-[#FF3E00] focus:ring-0 focus:outline-none"
+                      />
+                    </div>
+
+                    {/* Mastery score range slider */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center text-[10px] font-mono uppercase">
+                        <span className="text-white/40">Mastery Score</span>
+                        <span className="text-[#FF3E00] font-bold">{logScore}%</span>
+                      </div>
+                      <input 
+                        type="range" 
+                        min="0" 
+                        max="100" 
+                        value={logScore}
+                        onChange={(e) => setLogScore(parseInt(e.target.value))}
+                        className="w-full h-1 bg-white/5 rounded-lg appearance-none cursor-pointer accent-[#FF3E00] my-2"
+                      />
+                    </div>
+
+                    {/* Target level slider */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center text-[10px] font-mono uppercase">
+                        <span className="text-white/40">Target Threshold</span>
+                        <span className="text-white/70 font-bold">{logTarget}%</span>
+                      </div>
+                      <input 
+                        type="range" 
+                        min="0" 
+                        max="100" 
+                        value={logTarget}
+                        onChange={(e) => setLogTarget(parseInt(e.target.value))}
+                        className="w-full h-1 bg-white/5 rounded-lg appearance-none cursor-pointer accent-[#444] my-2"
+                      />
+                    </div>
+
+                    {/* Study commitment slider */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center text-[10px] font-mono uppercase">
+                        <span className="text-white/40">Study Time Limit</span>
+                        <span className="text-[#FF3E00] font-bold">{logHrs} Hours</span>
+                      </div>
+                      <input 
+                        type="range" 
+                        min="0" 
+                        max="15" 
+                        step="0.5" 
+                        value={logHrs}
+                        onChange={(e) => setLogHrs(parseFloat(e.target.value))}
+                        className="w-full h-1 bg-white/5 rounded-lg appearance-none cursor-pointer accent-[#FF3E00] my-2"
+                      />
+                    </div>
+
+                    {/* Click Button */}
+                    <button
+                      onClick={() => {
+                        if (!logLabel.trim()) return;
+                        
+                        setTrendsData(prev => {
+                          const list = prev[selectedSubject] || [];
+                          return {
+                            ...prev,
+                            [selectedSubject]: [
+                              ...list,
+                              { date: logLabel, score: logScore, target: logTarget, avgTime: logHrs }
+                            ]
+                          };
+                        });
+                        
+                        // play chime and state reset
+                        playChime('success');
+                        
+                        // Smart auto increment for the label
+                        const match = logLabel.match(/(\d+)/);
+                        if (match) {
+                          const nextNum = parseInt(match[0]) + 1;
+                          setLogLabel(logLabel.replace(/\d+/, nextNum.toString()));
+                        } else {
+                          setLogLabel('Seq ' + ((trendsData[selectedSubject]?.length || 0) + 2));
+                        }
+                      }}
+                      className="w-full py-2 bg-[#FF3E00] text-white border border-[#FF3E00]/30 hover:bg-[#D53200] font-mono tracking-wider uppercase text-[9px] rounded font-bold cursor-pointer transition-colors shadow-[0_0_12px_rgba(255,62,0,0.15)] mb-2"
+                    >
+                      Record Sequence Log
+                    </button>
+                  </div>
+                </div>
+
               </div>
             </motion.div>
           )}

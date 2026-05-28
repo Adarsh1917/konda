@@ -3,14 +3,62 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Code2, Terminal, Cpu, Braces, Sparkles, FolderCode, GitBranch, 
   ShieldCheck, Box, ChevronRight, Play, RefreshCcw, Command, AlertCircle, CheckCircle2,
-  Maximize, Plus, Trash2 
+  Maximize, Plus, Trash2, Copy, Check, Download, Layers
 } from 'lucide-react';
 import { cn, generateId } from '../lib/utils';
+import MermaidRenderer from './MermaidRenderer';
+
+const PRESET_TEMPLATES = {
+  os: `graph TD
+    User([User Client]) --> Gateway[API Gateway & Auth]
+    Gateway --> STTEnv[STT & TTS Engine]
+    Gateway --> NeuralCore[Konda Core Orchestrator]
+    NeuralCore --> StateSandbox[High-Reasoning Sandbox]
+    StateSandbox --> D3Canvas[Adaptive Graphics Layer]
+    StateSandbox --> MermaidViz[Mermaid Parser Pipeline]
+    StateSandbox --> GenAI[Multi-Modal Generative Core]
+    MermaidViz --> VizView[Interactive Systems View]`,
+  
+  microservices: `graph LR
+    Client([Client App]) --> Kong[Kong API Gateway]
+    Kong --> UserSvc[User Profile DB]
+    Kong --> PaySvc[Payment Processor]
+    Kong --> AIHub[Frontier AI Router]
+    UserSvc --> Postgre[(PostgreSQL Master)]
+    PaySvc --> StripeApi[Stripe Payment API]
+    AIHub --> RedisCache[(Redis Session Cache)]
+    AIHub --> GemCore[Gemini Core Node]`,
+  
+  serverless: `graph TD
+    App([Web App]) --> CloudFront[CloudFront CDN]
+    CloudFront --> ApiGw[API Gateway Client]
+    ApiGw --> AuthFn[Auth Lambda]
+    ApiGw --> IngestionFn[Data Stream Lambda]
+    IngestionFn --> Kinesis{Kinesis Data Stream}
+    Kinesis --> Firehose[Firehose S3 Archiver]
+    Firehose --> S3Bucket[(Raw Archives S3)]
+    Kinesis --> AnalyticsFn[Realtime Analytics Lambda]
+    AnalyticsFn --> Dynamo[(NoSQL Metrics Dynamo)]`,
+  
+  pipeline: `graph LR
+    Trigger[Cron Scheduler] --> Crawler[Web Crawlers]
+    Crawler --> Storage[(Raw Documents DB)]
+    Storage --> Vectorizer[AI Embeddings Pipeline]
+    Vectorizer --> VectorStore[(Pinecone Vector DB)]
+    VectorStore --> AgentQuery[Semantic Search Agent]`
+};
 
 export default function EngineeringModule() {
   const [activeTab, setActiveTab] = useState<'architecture' | 'optimization' | 'security' | 'interpreter' | 'strategy'>('architecture');
   const [isUpdating, setIsUpdating] = useState(false);
   const [isUpdated, setIsUpdated] = useState(() => localStorage.getItem('konda_packages_updated') === 'true');
+
+  // Systems Architect States
+  const [mermaidCode, setMermaidCode] = useState(PRESET_TEMPLATES.os);
+  const [selectedTemplate, setSelectedTemplate] = useState<'os' | 'microservices' | 'serverless' | 'pipeline'>('os');
+  const [copied, setCopied] = useState(false);
+  const [aiCommand, setAiCommand] = useState('');
+  const [isProcessingAi, setIsProcessingAi] = useState(false);
 
   const handleUpdate = () => {
     setIsUpdating(true);
@@ -19,6 +67,79 @@ export default function EngineeringModule() {
       setIsUpdated(true);
       setIsUpdating(false);
     }, 2000);
+  };
+
+  const handleTemplateSelection = (key: 'os' | 'microservices' | 'serverless' | 'pipeline') => {
+    setSelectedTemplate(key);
+    setMermaidCode(PRESET_TEMPLATES[key]);
+  };
+
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(mermaidCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const downloadSVG = () => {
+    const svgEl = document.querySelector('[id^="mermaid-render-"]');
+    if (!svgEl) return;
+    
+    const svgContent = svgEl.outerHTML;
+    const blob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `konda-architecture-${selectedTemplate}.svg`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const refineArchitecture = () => {
+    if (!aiCommand.trim()) return;
+    setIsProcessingAi(true);
+    
+    setTimeout(() => {
+      let updatedCode = mermaidCode;
+      const cmd = aiCommand.toLowerCase();
+      
+      if (cmd.includes('cache') || cmd.includes('redis')) {
+        if (updatedCode.includes('Postgre')) {
+          updatedCode = updatedCode.replace(
+            `UserSvc --> Postgre[(PostgreSQL Master)]`,
+            `UserSvc --> Redis[(Redis Cache)]\n    Redis --> Postgre[(PostgreSQL Master)]`
+          );
+        } else if (updatedCode.includes('Dynamo')) {
+          updatedCode = updatedCode.replace(
+            `AnalyticsFn --> Dynamo[(NoSQL Metrics Dynamo)]`,
+            `AnalyticsFn --> Cache[(Memcached Cache)]\n    Cache --> Dynamo[(NoSQL Metrics Dynamo)]`
+          );
+        } else {
+          updatedCode += `\n    Gateway --> CacheNode[(Redis App Caching)]`;
+        }
+      } else if (cmd.includes('monitoring') || cmd.includes('prometheus') || cmd.includes('grafana')) {
+        updatedCode += `\n    Gateway --> Prometheus[Prometheus Metrics]\n    Prometheus --> Grafana[Grafana Dashboard]`;
+      } else if (cmd.includes('queue') || cmd.includes('kafka') || cmd.includes('sqs')) {
+        if (updatedCode.includes('Gateway --> NeuralCore')) {
+          updatedCode = updatedCode.replace(
+            `Gateway --> NeuralCore[Konda Core Orchestrator]`,
+            `Gateway --> SQSQueue{SQS Message Buffer}\n    SQSQueue --> NeuralCore[Konda Core Orchestrator]`
+          );
+        } else {
+          updatedCode += `\n    Gateway --> KafkaQueue{Kafka System Log}`;
+        }
+      } else {
+        const formattedNodeName = aiCommand.replace(/[^a-zA-Z0-9 ]/g, '').replace(/\s+/g, '_');
+        const nodeLabel = aiCommand.trim();
+        updatedCode += `\n    StateSandbox --> ${formattedNodeName}[${nodeLabel}]`;
+      }
+      
+      setMermaidCode(updatedCode);
+      setIsProcessingAi(false);
+      setAiCommand('');
+    }, 1200);
   };
 
   return (
@@ -94,26 +215,145 @@ export default function EngineeringModule() {
               className="space-y-8"
             >
               {activeTab === 'architecture' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <ProjectCard 
-                    title="Neural_Hub_Microservice" 
-                    lang="TypeScript" 
-                    status="Active" 
-                    coverage="94%" 
-                  />
-                  <ProjectCard 
-                    title="Konda_OS_Kernel_V3" 
-                    lang="Rust" 
-                    status="Staging" 
-                    coverage="88%" 
-                  />
-                  <div className="md:col-span-2 p-8 border border-white/5 bg-[#050505] rounded-lg relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-4">
-                      <Braces className="w-4 h-4 text-[#FF3E00]/40" />
+                <div className="space-y-8">
+                  {/* Top quick stats cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <ProjectCard 
+                      title="Neural_Hub_Microservice" 
+                      lang="TypeScript" 
+                      status="Active" 
+                      coverage="94%" 
+                    />
+                    <ProjectCard 
+                      title="Konda_OS_Kernel_V3" 
+                      lang="Rust" 
+                      status="Staging" 
+                      coverage="88%" 
+                    />
+                  </div>
+
+                  {/* Systems Engineering Diagraming Workbench */}
+                  <div className="p-8 border border-white/5 bg-[#050505] rounded-lg space-y-6 relative overflow-hidden">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/5 pb-6">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Layers className="w-4 h-4 text-[#FF3E00] animate-pulse" />
+                          <h3 className="text-lg font-medium">Dynamic Core Architecture Sandbox</h3>
+                        </div>
+                        <p className="text-[10px] uppercase font-mono text-white/40 tracking-wider">Configure, mutate, and export system topological maps dynamically</p>
+                      </div>
+                      
+                      {/* Templates Tabs */}
+                      <div className="flex flex-wrap gap-2">
+                        {(['os', 'microservices', 'serverless', 'pipeline'] as const).map((tKey) => (
+                          <button
+                            key={tKey}
+                            onClick={() => handleTemplateSelection(tKey)}
+                            className={cn(
+                              "px-3 py-1.5 rounded-sm text-[9px] font-mono uppercase tracking-widest border transition-all",
+                              selectedTemplate === tKey
+                                ? "bg-[#FF3E00]/10 border-[#FF3E00] text-[#FF3E00] font-bold"
+                                : "bg-transparent border-white/5 text-white/40 hover:border-white/20 hover:text-white"
+                            )}
+                          >
+                            {tKey === 'os' ? 'Konda_Core' : tKey === 'microservices' ? 'Services' : tKey === 'serverless' ? 'Cloud' : 'Pipeline'}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <h3 className="text-lg font-medium mb-4">Neural Dependency Graph</h3>
-                    <div className="aspect-[21/9] bg-black/40 border border-white/5 rounded flex items-center justify-center font-mono text-[10px] text-white/20 uppercase tracking-[0.5em]">
-                      Visualizing_Kernel_Connections...
+
+                    {/* Dual-Pane Workspace */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                      {/* Left: Code Structure & Logic Morphing */}
+                      <div className="space-y-6">
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between text-[10px] font-mono text-white/40">
+                            <span>TOPOLOGICAL_DEFINITION (MERMAID)</span>
+                            <div className="flex gap-4">
+                              <button 
+                                onClick={handleCopyCode} 
+                                className="hover:text-white flex items-center gap-1 transition-colors cursor-pointer"
+                              >
+                                {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                                {copied ? '_Copied' : '_Copy'}
+                              </button>
+                              <button 
+                                onClick={() => setMermaidCode(PRESET_TEMPLATES[selectedTemplate])}
+                                className="hover:text-white flex items-center gap-1 transition-colors cursor-pointer"
+                              >
+                                <RefreshCcw className="w-3 h-3" />
+                                _Reload
+                              </button>
+                            </div>
+                          </div>
+                          
+                          <textarea
+                            value={mermaidCode}
+                            onChange={(e) => setMermaidCode(e.target.value)}
+                            className="w-full h-80 bg-black/60 border border-white/10 rounded p-4 font-mono text-xs text-white/80 focus:outline-none focus:border-[#FF3E00]/40 resize-none custom-scrollbar"
+                            spellCheck="false"
+                            placeholder="graph TD..."
+                          />
+                        </div>
+
+                        {/* Intel Logic Copilot input */}
+                        <div className="p-4 border border-[#FF3E00]/10 bg-[#FF3E00]/[0.01] rounded space-y-3">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="w-3.5 h-3.5 text-[#FF3E00]" />
+                            <span className="text-[10px] font-mono uppercase tracking-widest text-[#FF3E00]">AI Structural Morphing Copilot</span>
+                          </div>
+                          <p className="text-[9px] text-white/40">Write structural modifications (e.g., "Add redis cache before database", "Add custom logging monitor") to inject blocks automatically.</p>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={aiCommand}
+                              onChange={(e) => setAiCommand(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && refineArchitecture()}
+                              placeholder="Inject cache / prometheus / kafka block..."
+                              className="flex-1 bg-black/60 border border-white/10 rounded px-3 py-2 text-xs font-mono text-white/80 focus:outline-none focus:border-[#FF3E00]/40"
+                            />
+                            <button
+                              disabled={isProcessingAi || !aiCommand.trim()}
+                              onClick={refineArchitecture}
+                              className={cn(
+                                "px-4 py-2 text-[9px] font-mono uppercase tracking-widest rounded transition-all cursor-pointer",
+                                isProcessingAi || !aiCommand.trim()
+                                  ? "bg-white/5 border border-white/5 text-white/20"
+                                  : "bg-[#FF3E00] text-black font-bold hover:bg-[#FF3E00]/90 shadow-[0_0_10px_rgba(255,62,0,0.3)]"
+                              )}
+                            >
+                              {isProcessingAi ? 'Morphing...' : 'Morph'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right: Dynamic Interactive Diagram View */}
+                      <div className="space-y-3 flex flex-col h-full justify-between">
+                        <div className="flex items-center justify-between text-[10px] font-mono text-white/40">
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-ping" />
+                            DYNAMIC_GRAPHICAL_VIEW
+                          </span>
+                          
+                          <button
+                            onClick={downloadSVG}
+                            className="hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer"
+                          >
+                            <Download className="w-3.5 h-3.5 text-[#FF3E00]" />
+                            _Export_SVG
+                          </button>
+                        </div>
+
+                        <div className="flex-1 min-h-[350px]">
+                          <MermaidRenderer code={mermaidCode} />
+                        </div>
+
+                        <div className="p-3 border border-white/5 bg-white/[0.01] rounded flex items-center justify-between text-[8px] font-mono text-white/30 uppercase tracking-widest">
+                          <span>Theme: Slate Dark Cyber</span>
+                          <span>RENDER_SUCCESS: STABLE</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
