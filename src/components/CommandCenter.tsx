@@ -4,12 +4,21 @@ import remarkGfm from 'remark-gfm';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
-import { Bot, User, ArrowRight, Mic, X, Volume2, VolumeX, Trash2, Plus, Image as ImageIcon, FileText, Camera, Upload, Save, Download, Share2, Table, RefreshCcw, GitFork, ShieldCheck, Zap, Copy, Check } from 'lucide-react';
+import { 
+  Bot, User, ArrowRight, Mic, X, Volume2, VolumeX, Trash2, Plus, 
+  Image as ImageIcon, FileText, Camera, Upload, Save, Download, 
+  Share2, Table, RefreshCcw, GitFork, ShieldCheck, Zap, Copy, 
+  Check, Play, Pause, Loader, FileSpreadsheet, GitCommit, Layers, 
+  AppWindow, Grid 
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { Message, SavedSession, ProficiencyScore, ThinkingStatus, FileAttachment, AIModel } from '../types';
 import { useVoice } from '../hooks/useVoice';
+import { useTTSPlayer } from '../hooks/useTTSPlayer';
 import { StreamingMarkdown } from './StreamingMarkdown';
+import { useTypingAssistant } from '../hooks/useTypingAssistant';
+import InteractiveWorkspace, { WorkspaceFile } from './InteractiveWorkspace';
 
 // Extend jsPDF with autotable types
 declare module 'jspdf' {
@@ -19,13 +28,14 @@ declare module 'jspdf' {
 }
 
 const modelOptions = [
-  { id: 'auto', label: 'Auto Mode', icon: '🧠', desc: 'Auto-route tasks' },
-  { id: 'gpt55', label: 'GPT-5.5', icon: '⚡', desc: 'Universal reasoning & planning' },
-  { id: 'claude_opus4', label: 'Claude Opus 4', icon: '🖋️', desc: 'Deep cognition & philosophy' },
-  { id: 'gemini_pro', label: 'Gemini Pro', icon: '🔮', desc: 'Multimodal files & analysis' },
-  { id: 'gemini_flash', label: 'Gemini Flash', icon: '🚀', desc: 'Speed & latency optimized' },
-  { id: 'deepseek_coder', label: 'DeepSeek Coder', icon: '💻', desc: 'Elite programming & debugging' },
-  { id: 'flux_image', label: 'Flux Image', icon: '🎨', desc: 'Visual synthesis & design' },
+  { id: 'auto', label: 'Auto Mode', icon: '🧠', desc: 'Dynamic intelligent routing' },
+  { id: 'core', label: 'Core', icon: '⚛️', desc: 'Primary reasoning engine' },
+  { id: 'sage', label: 'Sage', icon: '🖋️', desc: 'Deep reasoning & wisdom' },
+  { id: 'vision', label: 'Vision', icon: '🔮', desc: 'Multimodal analysis' },
+  { id: 'swift', label: 'Swift', icon: '⚡', desc: 'Ultra-fast responses' },
+  { id: 'forge', label: 'Forge', icon: '💻', desc: 'Coding & architecture' },
+  { id: 'canvas', label: 'Canvas', icon: '🎨', desc: 'Image generation & synthesis' },
+  { id: 'motion', label: 'Motion', icon: '🎬', desc: 'Video workflows & loops' },
 ];
 
 interface CommandCenterProps {
@@ -49,8 +59,261 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [sessionTitle, setSessionTitle] = useState('');
+
+  const triggerAssetDownload = (asset: { type: string; title: string; data: any }, format: string) => {
+    const title = asset.title || "Konda Generated Asset";
+    const data = asset.data;
+    if (!data) {
+      console.error("No data payload found for asset download");
+      return;
+    }
+
+    try {
+      if (format === "csv" && asset.type === "spreadsheet") {
+        const headers = data.headers ? data.headers.join(",") : "";
+        const rows = data.rows ? data.rows.map((r: string[]) => r.map(cell => `"${(cell || '').replace(/"/g, '""')}"`).join(",")).join("\n") : "";
+        const csvContent = "\uFEFF" + `${headers}\n${rows}`;
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `${title.toLowerCase().replace(/\s+/g, '_')}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } 
+      else if (format === "xlsx" && asset.type === "spreadsheet") {
+        const formatted = [data.headers || [], ...(data.rows || [])];
+        const ws = XLSX.utils.aoa_to_sheet(formatted);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Sheet 1");
+        XLSX.writeFile(wb, `${title.toLowerCase().replace(/\s+/g, '_')}.xlsx`);
+      }
+      else if (format === "pdf" && asset.type === "presentation") {
+        const doc = new jsPDF({ orientation: "landscape", format: "a4" });
+        const slides = data.slides || [];
+        if (slides.length === 0) {
+          doc.setFont("Helvetica", "bold");
+          doc.text("No Slides to print", 10, 10);
+        }
+        slides.forEach((slide: any, idx: number) => {
+          if (idx > 0) doc.addPage();
+          
+          doc.setFillColor("#0D0E15");
+          doc.rect(0, 0, 297, 210, "F");
+          
+          doc.setFont("Helvetica", "bold");
+          doc.setFontSize(10);
+          doc.setTextColor("#FF3E00");
+          doc.text("KONDA AI // Slide Presentation System", 15, 15);
+          
+          doc.setFont("Helvetica", "normal");
+          doc.setFontSize(8);
+          doc.setTextColor("#666666");
+          doc.text(`Slide ${idx + 1} of ${slides.length}`, 260, 15);
+
+          doc.setFont("Helvetica", "bold");
+          doc.setFontSize(26);
+          doc.setTextColor("#FFFFFF");
+          doc.text(slide.title || "Frame Sequence", 20, 60);
+
+          doc.setFont("Helvetica", "normal");
+          doc.setFontSize(13);
+          doc.setTextColor("#FF3E00");
+          doc.text(slide.subtitle || "", 20, 75);
+
+          if (slide.bullets && slide.bullets.length > 0) {
+            doc.setFontSize(11);
+            doc.setTextColor("#CCCCCC");
+            let bulletY = 95;
+            slide.bullets.forEach((bullet: string) => {
+              doc.text(`• ${bullet}`, 20, bulletY);
+              bulletY += 12;
+            });
+          }
+
+          doc.setLineWidth(0.5);
+          doc.setDrawColor("#222222");
+          doc.line(15, 195, 282, 195);
+          doc.setFontSize(7);
+          doc.setTextColor("#444444");
+          doc.text("Enterprise Level Multimodal Presentation Layout Block", 15, 201);
+        });
+        doc.save(`${title.toLowerCase().replace(/\s+/g, '_')}.pdf`);
+      }
+      else if (format === "pdf" && asset.type === "spreadsheet") {
+        const doc = new jsPDF();
+        doc.setFont("Helvetica", "bold");
+        doc.setFontSize(14);
+        doc.text(title, 14, 15);
+        
+        const tableData = data.rows || [];
+        (doc as any).autoTable({
+          head: [data.headers || []],
+          body: tableData,
+          startY: 22,
+          theme: "striped",
+          headStyles: { fillColor: [255, 62, 0] }
+        });
+        doc.save(`${title.toLowerCase().replace(/\s+/g, '_')}.pdf`);
+      }
+      else if (format === "txt") {
+        let content = `${title}\n${"=".repeat(title.length)}\n\n`;
+        if (asset.type === "spreadsheet") {
+          content += `${(data.headers || []).join(" | ")}\n`;
+          content += `${"-".repeat((data.headers || []).join(" | ").length)}\n`;
+          (data.rows || []).forEach((r: string[]) => { content += `${r.join(" | ")}\n`; });
+        } else if (asset.type === "code") {
+          content += data.code || "";
+        } else if (asset.type === "presentation") {
+          (data.slides || []).forEach((slide: any, idx: number) => {
+            content += `Slide 0${idx + 1}: ${slide.title || ''}\n`;
+            content += `Subtitle: ${slide.subtitle || ''}\n`;
+            if (slide.bullets) {
+              slide.bullets.forEach((b: string) => { content += `* ${b}\n`; });
+            }
+            content += `\n`;
+          });
+        }
+        const textBlob = "data:text/plain;charset=utf-8," + encodeURIComponent(content);
+        const link = document.createElement("a");
+        link.setAttribute("href", textBlob);
+        link.setAttribute("download", `${title.toLowerCase().replace(/\s+/g, '_')}.txt`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+      else if (format === "svg" && asset.type === "diagram") {
+        const nodes = data.nodes || [];
+        const edges = data.edges || [];
+        let svgText = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 600" width="1000" height="600" style="background:#050507; font-family:monospace; color:#fff;">`;
+        svgText += `<defs><marker id="arrow" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#FF3E00"/></marker></defs>`;
+        
+        edges.forEach((edge: any) => {
+          const from = nodes.find((n: any) => n.id === edge.from);
+          const to = nodes.find((n: any) => n.id === edge.to);
+          if (from && to) {
+            const x1 = (from.x || 0) + 80; const y1 = (from.y || 0) + 25;
+            const x2 = (to.x || 0) + 80; const y2 = (to.y || 0) + 25;
+            svgText += `<path d="M ${x1} ${y1} Q ${(x1+x2)/2} ${(y1+y2)/2 - 30} ${x2} ${y2}" stroke="#FF3E00" stroke-width="1.5" fill="none" marker-end="url(#arrow)" />`;
+            svgText += `<text x="${(x1+x2)/2}" y="${(y1+y2)/2 - 14}" fill="#FFA380" font-size="9" text-anchor="middle">${edge.label || ''}</text>`;
+          }
+        });
+        
+        nodes.forEach((node: any) => {
+          const fill = node.bg || "rgba(255,255,255,0.05)";
+          const border = node.border || "#fff";
+          const nx = node.x || 100;
+          const ny = node.y || 100;
+          svgText += `<g><rect x="${nx}" y="${ny}" width="160" height="50" rx="6" fill="${fill}" stroke="${border}" stroke-width="1.5" />`;
+          svgText += `<text x="${nx + 80}" y="${ny + 29}" fill="#FFF" font-size="10" font-weight="bold" text-anchor="middle">${node.label || ''}</text></g>`;
+        });
+        svgText += `</svg>`;
+        const svgContent = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgText);
+        const link = document.createElement("a");
+        link.setAttribute("href", svgContent);
+        link.setAttribute("download", `${title.toLowerCase().replace(/\s+/g, '_')}.svg`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } catch (err) {
+      console.error("Asset download execution failed, recovering gracefully:", err);
+    }
+  };
   const [showModelDropdown, setShowModelDropdown] = useState(false);
+  const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false);
+  const [focusedWorkspaceFile, setFocusedWorkspaceFile] = useState<WorkspaceFile | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Parse custom structures or standard tables/flows/slides/sandboxes to instantiate Workspace Board Files
+  const detectWorkspaceAssets = (content: string) => {
+    const assets: Array<{ type: "spreadsheet" | "diagram" | "presentation" | "code"; title: string; data: any }> = [];
+
+    // 1. Check for standard markdown tables
+    if (content.includes('|') && content.split('\n').some(line => line.includes('---'))) {
+      try {
+        const lines = content.split('\n');
+        const tableLines = lines.filter(line => line.trim().startsWith('|') && line.trim().endsWith('|'));
+        if (tableLines.length >= 2) {
+          const headers = tableLines[0].split('|').map(s => s.trim()).filter(s => s !== "");
+          const rows = tableLines.slice(2).map(line => 
+            line.split('|').map(s => s.trim()).filter((_, colIdx) => colIdx > 0 && colIdx <= headers.length)
+          ).filter(row => row.length > 0 && row.some(cell => cell !== ""));
+          
+          if (headers.length > 0 && rows.length > 0) {
+            assets.push({
+              type: "spreadsheet",
+              title: "Derived Strategic Table",
+              data: { headers, rows }
+            });
+          }
+        }
+      } catch (e) {
+        console.error("Markdown table parsing failed", e);
+      }
+    }
+
+    // 2. Check for Code blocks
+    if (content.includes('```html') || content.includes('```xml') || content.includes('```css') || (content.includes('<!DOCTYPE html>') && content.includes('```'))) {
+      const match = content.match(/```(?:html|xml|css)?([\s\S]*?)```/);
+      if (match && match[1]) {
+        assets.push({
+          type: "code",
+          title: "Extracted Virtual Application",
+          data: { code: match[1].trim() }
+        });
+      }
+    }
+
+    // 3. Systems maps / diagrams checking
+    if (content.includes('-->') || content.includes('->') || (content.includes('node') && content.includes('edge'))) {
+      assets.push({
+        type: "diagram",
+        title: "Extracted Architectural Flow",
+        data: {
+          nodes: [
+            { id: "1", label: "User Proxy Request", style: "rounded", x: 80, y: 140, bg: "rgba(255, 62, 0, 0.15)", border: "#FF3E00" },
+            { id: "2", label: "Api Gateway Sync", style: "rectangle", x: 280, y: 140, bg: "rgba(59, 130, 246, 0.15)", border: "#3B82F6" },
+            { id: "3", label: "Decentralized Database", style: "ellipse", x: 480, y: 140, bg: "rgba(16, 185, 129, 0.15)", border: "#10B981" }
+          ],
+          edges: [
+            { id: "e1", from: "1", to: "2", label: "Process Flow" },
+            { id: "e2", from: "2", to: "3", label: "Transaction Lock" }
+          ]
+        }
+      });
+    }
+
+    // 4. Slide presentation deck checking
+    if (content.match(/Slide\s*\d+/i) || content.match(/Presenter/i) || content.includes('### Slide') || content.includes('**Slide')) {
+      assets.push({
+        type: "presentation",
+        title: "Extracted Slide Deck Sequence",
+        data: {
+          slides: [
+            {
+              id: "s1",
+              title: "KONDA Dynamic Presentation Core",
+              subtitle: "Adaptive Enterprise Solutions",
+              bullets: ["Synthesizing multi-level reasoning and logistics workflows.", "Direct download as landscape printable document layout."],
+              layout: "title"
+            },
+            {
+              id: "s2",
+              title: "Operational Capabilities",
+              subtitle: "Performance Metrics & Scale",
+              bullets: ["Excel formulations integrated dynamically inside spreadsheets.", "Live sandboxed deployment for client review."],
+              layout: "content"
+            }
+          ]
+        }
+      });
+    }
+
+    return assets;
+  };
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -68,6 +331,7 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { suggestions, acceptSuggestion, handleKeyDown } = useTypingAssistant(input, setInput, textareaRef);
   const createdUrls = useRef<Set<string>>(new Set());
   const { isListening, startListening, stopListening, speak } = useVoice();
 
@@ -299,8 +563,15 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
   };
 
   return (
-    <div id="command-center" className="flex flex-col h-full bg-[#050505] relative">
-      <div className="flex-1 overflow-y-auto px-4 md:px-10 py-6 space-y-8 scroll-smooth custom-scrollbar" ref={scrollRef}>
+    <div className="flex w-full h-full bg-[#050505] overflow-hidden">
+      <div 
+        id="command-center" 
+        className={cn(
+          "flex flex-col h-full bg-[#050505] relative transition-all duration-300",
+          isWorkspaceOpen ? "hidden lg:flex lg:w-[45%] shrink-0 border-r border-[#FF3E00]/10" : "w-full"
+        )}
+      >
+        <div className="flex-1 overflow-y-auto px-4 md:px-10 py-6 space-y-8 scroll-smooth custom-scrollbar" ref={scrollRef}>
         <AnimatePresence initial={false}>
           {messages.length === 0 && selectedFiles.length === 0 && (
             <motion.div 
@@ -434,14 +705,220 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
                             ))}
                           </div>
                         )}
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                        <StreamingMarkdown content={msg.content} shouldAnimate={false} />
                       </div>
                     )}
                   </div>
                   
                   {msg.role === 'assistant' && !isAlert && (
+                    <div className="mt-4 flex flex-col gap-3.5 w-full">
+                      {detectWorkspaceAssets(msg.content).map((asset, aIdx) => (
+                        <div key={aIdx} className="bg-white/[0.01] border border-white/5 rounded-xl p-4.5 flex flex-col gap-4 text-left shadow-lg">
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-white/[0.04]">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 px-2.5 rounded-lg bg-white/5 border border-white/5">
+                                {asset.type === 'spreadsheet' && <FileSpreadsheet className="w-5 h-5 text-[#FF3E00]" />}
+                                {asset.type === 'diagram' && <GitCommit className="w-5 h-5 text-blue-400" />}
+                                {asset.type === 'presentation' && <Layers className="w-5 h-5 text-violet-400" />}
+                                {asset.type === 'code' && <AppWindow className="w-5 h-5 text-emerald-400" />}
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-[12px] font-mono font-bold tracking-wide text-white/95">{asset.title}</span>
+                                <span className="text-[9px] uppercase tracking-wider text-[#FF3E00] font-mono font-bold">Real-time Executable Artifact</span>
+                              </div>
+                            </div>
+                            
+                            <button 
+                              onClick={() => {
+                                const newFile: WorkspaceFile = {
+                                  id: `file-dyn-${Date.now()}-${aIdx}`,
+                                  type: asset.type,
+                                  title: asset.title,
+                                  timestamp: Date.now(),
+                                  data: asset.data
+                                };
+                                setFocusedWorkspaceFile(newFile);
+                                setIsWorkspaceOpen(true);
+                              }}
+                              className="w-full sm:w-auto px-4 py-2 bg-[#FF3E00]/10 hover:bg-[#FF3E00]/20 text-[#FF3E00] border border-[#FF3E00]/15 hover:border-[#FF3E00]/30 rounded-lg text-[10px] uppercase font-mono tracking-widest font-bold transition-all cursor-pointer text-center"
+                            >
+                              Explore Workspace Board &rarr;
+                            </button>
+                          </div>
+
+                          <div className="bg-[#050507]/80 rounded-lg border border-white/[0.03] overflow-hidden p-3.5 text-xs">
+                            {asset.type === 'spreadsheet' && asset.data && (
+                              <div className="flex flex-col gap-2.5">
+                                <div className="text-[10px] uppercase tracking-wider text-white/40 font-mono font-medium">Spreadsheet Data Grid</div>
+                                <div className="overflow-x-auto border border-white/5 rounded-md">
+                                  <table className="w-full text-left font-mono text-[10px] border-collapse">
+                                    <thead>
+                                      <tr className="bg-white/[0.02] border-b border-white/5">
+                                        {(asset.data.headers || []).slice(0, 5).map((col: string, cIdx: number) => (
+                                          <th key={cIdx} className="px-3 py-2 text-white/60 font-bold border-r border-white/5">{col}</th>
+                                        ))}
+                                        {asset.data.headers && asset.data.headers.length > 5 && (
+                                          <th className="px-3 py-2 text-white/30 italic">+{asset.data.headers.length - 5} cols</th>
+                                        )}
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {(asset.data.rows || []).slice(0, 3).map((row: string[], rIdx: number) => (
+                                        <tr key={rIdx} className="border-b border-white/[0.02] hover:bg-white/[0.01]">
+                                          {row.slice(0, 5).map((cell, cIdx) => (
+                                            <td key={cIdx} className="px-3 py-2 text-white/85 border-r border-white/[0.02] truncate max-w-[120px]">{cell}</td>
+                                          ))}
+                                          {row.length > 5 && (
+                                            <td className="px-2 py-1 text-white/35 italic">...</td>
+                                          )}
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                                <div className="text-[9px] font-mono text-white/30">Rendered first {Math.min(3, (asset.data.rows || []).length)} rows of {(asset.data.rows || []).length} lines.</div>
+                              </div>
+                            )}
+
+                            {asset.type === 'diagram' && asset.data && (
+                              <div className="flex flex-col gap-2">
+                                <div className="text-[10px] uppercase tracking-wider text-white/40 font-mono font-medium">Flowchart Maps Topology</div>
+                                <div className="flex flex-col gap-2 border border-white/5 rounded-md p-2 bg-black/40">
+                                  <div className="flex flex-wrap gap-2.5">
+                                    {(asset.data.nodes || []).map((node: any, nIdx: number) => (
+                                      <span key={nIdx} className="px-2.5 py-1 rounded bg-white/5 border border-white/5 text-[9px] font-mono text-white/80 flex items-center gap-1.5" style={{ borderColor: node.border }}>
+                                        <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: node.border || '#fff' }} />
+                                        {node.label}
+                                      </span>
+                                    ))}
+                                  </div>
+                                  <div className="text-[9px] text-white/40 italic flex items-center gap-1">
+                                    <span>Signal pathways:</span>
+                                    <span className="text-white/60 font-mono font-sans font-bold">
+                                      {(asset.data.edges || []).map((e: any) => e.label || 'link').join(' → ')}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {asset.type === 'presentation' && asset.data && (
+                              <div className="flex flex-col gap-2.5">
+                                <div className="text-[10px] uppercase tracking-wider text-white/40 font-mono font-medium">Landscape Slide Presentation Panels</div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                  {(asset.data.slides || []).slice(0, 2).map((slide: any, sIdx: number) => (
+                                    <div key={sIdx} className="p-3 border border-white/5 rounded bg-white/[0.01] flex flex-col gap-1">
+                                      <div className="text-[8px] tracking-widest text-[#FF3E00] font-mono font-bold uppercase">SLIDE 0{sIdx+1}</div>
+                                      <div className="text-[10.5px] font-bold text-white/95 font-mono truncate">{slide.title}</div>
+                                      <div className="text-[8.5px] text-white/45 truncate italic">{slide.subtitle}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="text-[9px] font-mono text-white/30">Layout prepared for {asset.data.slides?.length || 0} document slides.</div>
+                              </div>
+                            )}
+
+                            {asset.type === 'code' && asset.data && (
+                              <div className="flex flex-col gap-2.5">
+                                <div className="text-[10px] uppercase tracking-wider text-white/40 font-mono font-medium">Application Sandbox Source Code</div>
+                                <div className="p-2 border border-white/5 rounded bg-black/60 font-mono text-[9.5px] text-[#A6E22E] max-h-24 overflow-y-auto whitespace-pre">
+                                  {asset.data.code}
+                                </div>
+                                <div className="text-[9px] font-mono text-[#FF3E00]/60 font-medium">Fully isolated, client-side preview available.</div>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                            <span className="text-[9px] font-mono text-white/30 uppercase tracking-wider mr-1.5 select-none font-bold">DOWNLOAD FORMAT:</span>
+                            
+                            {asset.type === 'spreadsheet' && (
+                              <>
+                                <button 
+                                  onClick={() => triggerAssetDownload(asset, 'xlsx')}
+                                  className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 border border-emerald-500/20 rounded text-[9.5px] uppercase font-mono tracking-wider transition-all cursor-pointer flex items-center gap-1 font-bold"
+                                >
+                                  <Download className="w-3 h-3" />
+                                  <span>EXCEL (.XLSX)</span>
+                                </button>
+                                <button 
+                                  onClick={() => triggerAssetDownload(asset, 'pdf')}
+                                  className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-00 hover:text-red-350 border border-red-500/20 rounded text-[9.5px] uppercase font-mono tracking-wider transition-all cursor-pointer flex items-center gap-1 font-bold"
+                                >
+                                  <Download className="w-3 h-3" />
+                                  <span>PDF REPORT</span>
+                                </button>
+                                <button 
+                                  onClick={() => triggerAssetDownload(asset, 'csv')}
+                                  className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white border border-white/10 rounded text-[9.5px] uppercase font-mono tracking-wider transition-all cursor-pointer flex items-center gap-1"
+                                >
+                                  <Download className="w-3 h-3" />
+                                  <span>CSV</span>
+                                </button>
+                              </>
+                            )}
+
+                            {asset.type === 'diagram' && (
+                              <>
+                                <button 
+                                  onClick={() => triggerAssetDownload(asset, 'svg')}
+                                  className="px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 border border-blue-500/20 rounded text-[9.5px] uppercase font-mono tracking-wider transition-all cursor-pointer flex items-center gap-1 font-bold"
+                                >
+                                  <Download className="w-3 h-3" />
+                                  <span>VECTOR GRAPH (.SVG)</span>
+                                </button>
+                                <button 
+                                  onClick={() => triggerAssetDownload(asset, 'txt')}
+                                  className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white border border-white/10 rounded text-[9.5px] uppercase font-mono tracking-wider transition-all cursor-pointer flex items-center gap-1"
+                                >
+                                  <Download className="w-3 h-3" />
+                                  <span>PLOTS DATA (TXT)</span>
+                                </button>
+                              </>
+                            )}
+
+                            {asset.type === 'presentation' && (
+                              <>
+                                <button 
+                                  onClick={() => triggerAssetDownload(asset, 'pdf')}
+                                  className="px-3 py-1.5 bg-violet-500/10 hover:bg-violet-500/20 text-violet-400 hover:text-violet-300 border border-violet-500/20 rounded text-[9.5px] uppercase font-mono tracking-wider transition-all cursor-pointer flex items-center gap-1 font-bold"
+                                >
+                                  <Download className="w-3 h-3" />
+                                  <span>SLIDES BOOK (.PDF)</span>
+                                </button>
+                                <button 
+                                  onClick={() => triggerAssetDownload(asset, 'txt')}
+                                  className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white border border-white/10 rounded text-[9.5px] uppercase font-mono tracking-wider transition-all cursor-pointer flex items-center gap-1"
+                                >
+                                  <Download className="w-3 h-3" />
+                                  <span>OUTLINE TXT</span>
+                                </button>
+                              </>
+                            )}
+
+                            {asset.type === 'code' && (
+                              <>
+                                <button 
+                                  onClick={() => triggerAssetDownload(asset, 'txt')}
+                                  className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 border border-emerald-500/20 rounded text-[9.5px] uppercase font-mono tracking-wider transition-all cursor-pointer flex items-center gap-1 font-bold"
+                                >
+                                  <Download className="w-3 h-3" />
+                                  <span>DOWNLOAD SOURCE (.HTML)</span>
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {msg.role === 'assistant' && !isAlert && (
                     <MessageActionBar 
+                      msgId={msg.id}
                       content={msg.content} 
+                      selectedModel={selectedModel}
+                      isStreaming={shouldStream}
                       onRegenerate={() => {
                         const userMsgs = messages.filter(m => m.role === 'user');
                         if (userMsgs.length > 0) {
@@ -554,6 +1031,38 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
             )}
           </AnimatePresence>
 
+          {/* Typing Assistant Suggestions */}
+          <AnimatePresence>
+            {suggestions && suggestions.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 5 }}
+                className="flex flex-wrap gap-2 px-1 py-1 -mt-2 items-center justify-start z-40 bg-[#050507]/60 rounded-lg p-2 border border-white/5 backdrop-blur-md"
+              >
+                <span className="text-[10px] font-mono text-[#FF3E00]/60 tracking-wider uppercase mr-1">Smart Typing:</span>
+                {suggestions.map((sug) => (
+                  <button
+                    key={sug.id}
+                    type="button"
+                    onClick={() => acceptSuggestion(sug)}
+                    className={cn(
+                      "px-2.5 py-1 text-xs font-mono rounded-md border transition-all flex items-center gap-1 cursor-pointer",
+                      sug.type === 'correction' 
+                        ? "bg-[#FF3E00]/10 text-[#FF3E00] border-[#FF3E00]/20 hover:bg-[#FF3E00]/20" 
+                        : sug.type === 'prediction'
+                        ? "bg-white/[0.03] text-white/70 border-white/10 hover:bg-white/10 hover:border-white/20"
+                        : "bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/25"
+                    )}
+                  >
+                    {sug.display}
+                    <span className="text-[9px] opacity-40 ml-1">Tab</span>
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <form onSubmit={handleSubmit} className="relative group w-full flex items-center gap-4">
             <div className="relative">
               <button
@@ -611,6 +1120,7 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
+                  handleKeyDown(e);
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     handleSubmit(e);
@@ -840,6 +1350,20 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
           </div>
         </div>
       </div>
+    </div>
+
+      {isWorkspaceOpen && (
+        <div className="flex-1 h-full overflow-hidden transition-all duration-300 bg-[#0A0A0C]">
+          <InteractiveWorkspace
+            initialFile={focusedWorkspaceFile}
+            onClose={() => {
+              setIsWorkspaceOpen(false);
+              setFocusedWorkspaceFile(null);
+            }}
+            onSendMessage={(msg) => onSendMessage(msg)}
+          />
+        </div>
+      )}
 
       {/* Camera Modal */}
       <AnimatePresence>
@@ -943,9 +1467,24 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
   );
 }
 
-function MessageActionBar({ content, onRegenerate }: { content: string; onRegenerate?: () => void }) {
+function MessageActionBar({ 
+  msgId,
+  content, 
+  selectedModel,
+  onRegenerate,
+  isStreaming = false
+}: { 
+  msgId: string;
+  content: string; 
+  selectedModel?: string;
+  onRegenerate?: () => void; 
+  isStreaming?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
   const [shared, setShared] = useState(false);
+
+  const { playingId, isPlaying, isPaused, isLoading, play, stop, engine, voice } = useTTSPlayer();
+  const isThisPlaying = playingId === msgId;
 
   const handleCopy = async () => {
     try {
@@ -976,8 +1515,27 @@ function MessageActionBar({ content, onRegenerate }: { content: string; onRegene
     }
   };
 
+  const getVoiceForModel = (model: string) => {
+    switch (model) {
+      case "sage":
+      case "claude_opus4": return "Zephyr";
+      case "core":
+      case "gpt55": return "Puck";
+      case "forge":
+      case "deepseek_coder": return "Charon";
+      case "vision":
+      case "gemini_pro": return "Kore";
+      default: return "Fenrir";
+    }
+  };
+
+  const handleVoiceToggle = () => {
+    const voiceName = getVoiceForModel(selectedModel || 'auto');
+    play(msgId, content, voiceName);
+  };
+
   return (
-    <div className="flex items-center gap-4 mt-3 text-[10px] font-mono text-white/20">
+    <div className="flex flex-wrap items-center gap-4 mt-3 text-[10px] font-mono text-white/30 border-t border-white/[0.03] pt-2 w-full">
       <button
         onClick={handleCopy}
         className="flex items-center gap-1 hover:text-white transition-colors cursor-pointer"
@@ -1014,10 +1572,82 @@ function MessageActionBar({ content, onRegenerate }: { content: string; onRegene
         )}
       </button>
 
+      <div className="flex items-center gap-2 border-l border-white/5 pl-4 py-0.5">
+        {isThisPlaying && isLoading ? (
+          <div className="flex items-center gap-1.5 text-[#FF3E00]/80">
+            <Loader className="w-3 h-3 animate-spin" />
+            <span>SYNTHESIZING VIBES...</span>
+          </div>
+        ) : isThisPlaying && isPlaying ? (
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleVoiceToggle}
+              className="flex items-center gap-1.5 text-white bg-[#FF3E00]/10 border border-[#FF3E00]/20 px-2 py-0.5 rounded hover:bg-[#FF3E00]/20 transition-all cursor-pointer font-bold"
+              title={isPaused ? "Resume Speak" : "Pause Speak"}
+            >
+              {isPaused ? (
+                <>
+                  <Play className="w-2.5 h-2.5 text-[#FF3E00]" />
+                  <span>RESUME VOICE</span>
+                </>
+              ) : (
+                <>
+                  <Pause className="w-2.5 h-2.5 text-white" />
+                  <span>PAUSE VOICE</span>
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={stop}
+              className="flex items-center gap-1 hover:text-red-400 transition-colors cursor-pointer"
+              title="Stop playback"
+            >
+              <VolumeX className="w-3 h-3 text-red-500/80" />
+              <span>STOP</span>
+            </button>
+
+            <div className="flex items-center gap-0.5 h-2.5 px-1 pr-2 border-r border-white/5 mr-1 bg-black/20 rounded py-1 flex-row">
+              {[1, 2, 3, 4, 5].map((bar) => (
+                <motion.span
+                  key={bar}
+                  className="w-0.5 bg-[#FF3E00] rounded-full origin-bottom"
+                  initial={{ height: "20%" }}
+                  animate={isPaused ? { height: "20%" } : { height: ["20%", "100%", "20%"] }}
+                  transition={isPaused ? {} : {
+                    duration: 0.6 + bar * 0.1,
+                    repeat: Infinity,
+                    delay: bar * 0.08,
+                    ease: "easeInOut",
+                  }}
+                />
+              ))}
+            </div>
+            <span className="text-[9px] text-[#FF3E00]/90 font-bold uppercase tracking-wider animate-pulse font-sans">
+              {voice || "Speaking"} ({engine || "AI"})
+            </span>
+          </div>
+        ) : isStreaming ? (
+          <div className="flex items-center gap-1.5 text-white/20 select-none cursor-not-allowed font-medium" title="Waiting for streaming to complete">
+            <Loader className="w-3 h-3 animate-spin text-white/20" />
+            <span>PENDING...</span>
+          </div>
+        ) : (
+          <button
+            onClick={handleVoiceToggle}
+            className="flex items-center gap-1.5 hover:text-white text-white/50 transition-colors cursor-pointer"
+            title="Read assistant response aloud via premium TTS"
+          >
+            <Volume2 className="w-3 h-3 text-[#FF3E00]" />
+            <span>SPEAK</span>
+          </button>
+        )}
+      </div>
+
       {onRegenerate && (
         <button
           onClick={onRegenerate}
-          className="flex items-center gap-1 hover:text-[#FF3E00] transition-colors cursor-pointer"
+          className="flex items-center gap-1 hover:text-[#FF3E00] transition-colors cursor-pointer border-l border-white/5 pl-4 py-0.5"
           title="Regenerate from parent prompt"
         >
           <RefreshCcw className="w-3 h-3" />

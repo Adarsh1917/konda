@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Bot, Radio, Volume2, VolumeX, Shield, Trash2, Camera, 
-  Terminal, Sparkles, Flame, Activity, Zap, Compass, RefreshCcw, Check, Play, Square, Settings2
+  Terminal, Sparkles, Flame, Activity, Zap, Compass, RefreshCcw, Check, Play, Square, Settings2,
+  ShieldAlert
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { AIModel, Message } from '../types';
@@ -361,7 +362,7 @@ export default function BujjiCompanion({
     try {
       // We will perform a live server completion to get a beautiful briefing in Bujji's unique voice!
       // Send a specialized system prompt modifier
-      const briefPersona = `You are Bujji — the futuristic companion AI from Kalki 2898 AD. You have a witty, lively, and highly intelligent personality, with a warm protective attitude and occasional humorous banter. Summarize the user's focus, state, and create a witty daily brief. Keep it to exactly two paragraphs. Address him as "Boss" or "Chief".`;
+      const briefPersona = `You are Bujji — a precise, intellectually honest analytical assistant. Deliver a calm, direct, and professional daily brief summarizing the user's focus and state. Keep it to exactly two paragraphs. Do not use nicknames, flattery, or theatrical personas. Respond as a trusted senior advisor would.`;
 
       const mockResponse = await fetch('/api/chat', {
         method: 'POST',
@@ -370,7 +371,7 @@ export default function BujjiCompanion({
           messages: [{ role: 'user', parts: [{ text: `Generate my daily brief. Memory context: ${memoryContext}` }] }],
           mode: 'intel',
           systemPrompt: briefPersona,
-          selectedModel: 'gpt55'
+          selectedModel: 'core'
         })
       });
 
@@ -382,10 +383,10 @@ export default function BujjiCompanion({
         throw new Error("Local Brief fallback invoked.");
       }
     } catch (err) {
-      // Smart offline fallback brief that sounds exactly like Bujji!
+      // Smart offline fallback brief that sounds fully professional and calibrated
       const briefs = [
-        "Hey Boss! Bujji here. I've scanned your local workspace diagnostics. Optic renderers are nominal, brain router is routing requests gracefully. The current temperature is a cozy 38 degrees Celsius, and you've committed over a dozen strategic parameters into my collective memory. What's on our radar today?",
-        "Good afternoon Chief! Bujji system at your command. The server uplinks are fully operational. I see you've been engineering full-stack node modules recently. I recommend we route code tasks through DeepSeek and let GPT-5.5 handle the strategic thinking layers. I'm fired up and ready to code!"
+        "Diagnostics report loaded. Your local workspace parameters are nominal, with all brain routers active. I have preserved your strategic variables securely in the collective memory. Focus areas are primed; please state your priority directives for today.",
+        "System diagnostics completed successfully. Server uplinks indicate optimal latency and throughput. I have catalogued your technical and architectural progress. We are prepared to address complex tasks and strategic logic whenever you are ready."
       ];
       const selected = briefs[Math.floor(Math.random() * briefs.length)];
       setDailyBrief(selected);
@@ -412,7 +413,65 @@ export default function BujjiCompanion({
   };
 
   if (shouldSimulateCrash) {
-    throw new Error("Konda OS Critical Exception: Bujji holographic logic pipeline collapsed under active load simulation.");
+    return (
+      <div className="w-full h-full bg-[#0d0404] flex flex-col border-l border-red-500/10 font-sans overflow-hidden">
+        {/* Top Header */}
+        <div className="p-4 border-b border-red-500/10 bg-black/40 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+            <div>
+              <h2 className="text-xs font-mono font-bold tracking-[0.25em] text-red-500 uppercase">BUJJI CORE EXCEPTION</h2>
+              <p className="text-[9px] text-red-500/40 font-mono tracking-wider">CRITICAL SYSTEM RESOLUTION</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-6">
+          <div className="relative">
+            <div className="w-16 h-16 rounded-full bg-red-950/20 border border-red-500/30 flex items-center justify-center animate-pulse">
+              <ShieldAlert className="w-8 h-8 text-red-500" />
+            </div>
+            <div className="absolute -inset-2 rounded-full border border-red-500/10 animate-ping pointer-events-none" />
+          </div>
+
+          <div className="space-y-2 max-w-xs">
+            <h3 className="text-xs font-mono font-bold tracking-wider text-red-400 uppercase">Holographic Deck Interrupted</h3>
+            <p className="text-[10px] text-white/50 leading-relaxed font-mono">
+              Bujji holographic logic pipeline collapsed under active load simulation. Restoring backup systems...
+            </p>
+          </div>
+
+          <div className="w-full max-w-xs p-3 bg-black/60 border border-red-950/40 rounded-xl text-left space-y-1.5 font-mono text-[9px]">
+            <div className="text-red-400 font-bold uppercase tracking-widest text-[8px]">STDERR::COGNITIVE_FAULT_RETAINED</div>
+            <div className="text-white/40">Status: ACTIVE_CONTAINER_HALT</div>
+            <div className="text-white/40">Vector Memory Address: 0x2Aef0C4</div>
+            <div className="text-white/40">Core Registers Preserved: True</div>
+          </div>
+
+          <div className="flex flex-col gap-2 w-full max-w-xs pt-2">
+            <button
+              onClick={() => {
+                setShouldSimulateCrash(false);
+                playChime('success');
+                addLog("Universal logic core rebooted successfully from active load simulation.");
+              }}
+              className="py-2 w-full bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 text-[10px] font-mono font-bold rounded-lg transition-all cursor-pointer active:scale-95 text-center shrink-0"
+            >
+              REBOOT COGNITIVE CORE
+            </button>
+            <button
+              onClick={() => {
+                // Keep option for hard React Error Boundary triggering if strictly wanted
+                throw new Error("Konda OS Critical Exception: Bujji holographic logic pipeline collapsed under active load simulation.");
+              }}
+              className="py-1.5 w-full text-white/25 hover:text-white/40 text-[8px] font-mono hover:underline cursor-pointer"
+            >
+              Force React Exception Boundary
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

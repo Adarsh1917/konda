@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles, ArrowRight, Bot, User, Zap, MessageCircle, Send } from 'lucide-react';
+import { Sparkles, ArrowRight, Bot, User, Zap, MessageCircle, Send, Volume2, VolumeX, Play, Pause, Loader } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Message, ModuleId, ThinkingStatus, AIModel } from '../types';
+import { useTTSPlayer } from '../hooks/useTTSPlayer';
+import { useTypingAssistant } from '../hooks/useTypingAssistant';
 
 interface KosmosModuleProps {
   onSendMessage: (val: string) => void;
@@ -15,13 +17,14 @@ interface KosmosModuleProps {
 }
 
 const modelOptions = [
-  { id: 'auto', label: 'Auto Mode', icon: '🧠', desc: 'Auto-route tasks' },
-  { id: 'gpt55', label: 'GPT-5.5', icon: '⚡', desc: 'Universal reasoning & planning' },
-  { id: 'claude_opus4', label: 'Claude Opus 4', icon: '🖋️', desc: 'Deep cognition & philosophy' },
-  { id: 'gemini_pro', label: 'Gemini Pro', icon: '🔮', desc: 'Multimodal files & analysis' },
-  { id: 'gemini_flash', label: 'Gemini Flash', icon: '🚀', desc: 'Speed & latency optimized' },
-  { id: 'deepseek_coder', label: 'DeepSeek Coder', icon: '💻', desc: 'Elite programming & debugging' },
-  { id: 'flux_image', label: 'Flux Image', icon: '🎨', desc: 'Visual synthesis & design' },
+  { id: 'auto', label: 'Auto Mode', icon: '🧠', desc: 'Dynamic intelligent routing' },
+  { id: 'core', label: 'Core', icon: '⚛️', desc: 'Primary reasoning engine' },
+  { id: 'sage', label: 'Sage', icon: '🖋️', desc: 'Deep reasoning & wisdom' },
+  { id: 'vision', label: 'Vision', icon: '🔮', desc: 'Multimodal analysis' },
+  { id: 'swift', label: 'Swift', icon: '⚡', desc: 'Ultra-fast responses' },
+  { id: 'forge', label: 'Forge', icon: '💻', desc: 'Coding & architecture' },
+  { id: 'canvas', label: 'Canvas', icon: '🎨', desc: 'Image generation & synthesis' },
+  { id: 'motion', label: 'Motion', icon: '🎬', desc: 'Video workflows & loops' },
 ];
 
 export default function KosmosModule({ onSendMessage, messages, isThinking, thinkingStatus, onSwitchModule, selectedModel, setSelectedModel }: KosmosModuleProps) {
@@ -29,6 +32,8 @@ export default function KosmosModule({ onSendMessage, messages, isThinking, thin
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { suggestions, acceptSuggestion, handleKeyDown } = useTypingAssistant(input, setInput, inputRef);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -138,12 +143,15 @@ export default function KosmosModule({ onSendMessage, messages, isThinking, thin
                 {msg.role === 'user' ? <User className="w-3.5 h-3.5 text-white/40" /> : <Bot className="w-3.5 h-3.5 text-[#FF3E00]" />}
               </div>
               <div className={cn(
-                "p-5 rounded-2xl text-sm leading-relaxed",
+                "p-5 rounded-2xl text-sm leading-relaxed flex flex-col gap-2",
                 msg.role === 'user' 
                   ? "bg-white/[0.03] border border-white/5 text-white/80 rounded-tr-none" 
                   : "bg-white/[0.01] border border-white/5 text-white/60 rounded-tl-none font-serif italic"
               )}>
-                {msg.content}
+                <div>{msg.content}</div>
+                {msg.role === 'assistant' && (
+                  <KosmosVoiceControl msgId={msg.id} content={msg.content} isStreaming={isThinking && index === messages.length - 1} />
+                )}
               </div>
             </motion.div>
           ))
@@ -177,16 +185,50 @@ export default function KosmosModule({ onSendMessage, messages, isThinking, thin
       </div>
 
       {/* Input */}
-      <div className="p-8 bg-black/40 border-t border-white/5 z-10">
+      <div className="p-8 bg-black/40 border-t border-white/5 z-10 flex flex-col gap-3">
+        {/* Typing Assistant Suggestions */}
+        <AnimatePresence>
+          {suggestions && suggestions.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 5 }}
+              className="flex flex-wrap gap-2 px-1 py-1 items-center justify-start z-40 bg-[#050507]/60 rounded-lg p-2 border border-white/5 backdrop-blur-md max-w-4xl mx-auto w-full"
+            >
+              <span className="text-[10px] font-mono text-[#FF3E00]/60 tracking-wider uppercase mr-1">Smart Typing:</span>
+              {suggestions.map((sug) => (
+                <button
+                  key={sug.id}
+                  type="button"
+                  onClick={() => acceptSuggestion(sug)}
+                  className={cn(
+                    "px-2.5 py-1 text-xs font-mono rounded-md border transition-all flex items-center gap-1 cursor-pointer",
+                    sug.type === 'correction' 
+                      ? "bg-[#FF3E00]/10 text-[#FF3E00] border-[#FF3E00]/20 hover:bg-[#FF3E00]/20" 
+                      : sug.type === 'prediction'
+                      ? "bg-white/[0.03] text-white/70 border-white/10 hover:bg-white/10 hover:border-white/20"
+                      : "bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/25"
+                  )}
+                >
+                  {sug.display}
+                  <span className="text-[9px] opacity-40 ml-1">Tab</span>
+                </button>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <form 
           onSubmit={handleSubmit}
-          className="max-w-4xl mx-auto relative group flex items-center"
+          className="max-w-4xl mx-auto relative group flex items-center w-full"
         >
           <div className="relative w-full">
             <input 
+              ref={inputRef}
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
               disabled={isThinking}
               placeholder="Type your casual query..."
               className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-8 pr-28 text-sm focus:outline-none focus:border-[#FF3E00]/30 transition-all placeholder:opacity-20 text-white"
@@ -276,5 +318,79 @@ function QuickAction({ icon: Icon, label, onClick }: any) {
       <Icon className="w-3 h-3" />
       {label}
     </button>
+  );
+}
+
+function KosmosVoiceControl({ 
+  msgId, 
+  content, 
+  isStreaming = false 
+}: { 
+  msgId: string; 
+  content: string; 
+  isStreaming?: boolean;
+}) {
+  const { playingId, isPlaying, isPaused, isLoading, play, stop, engine, voice } = useTTSPlayer();
+  const isThisPlaying = playingId === msgId;
+
+  const handleVoiceToggle = () => {
+    play(msgId, content, "Charon"); // Introspective model uses Charon voice
+  };
+
+  return (
+    <div className="flex items-center gap-3 text-[10px] font-mono text-white/30 border-t border-white/[0.03] pt-2 mt-1 w-full not-italic font-sans">
+      {isThisPlaying && isLoading ? (
+        <span className="flex items-center gap-1 text-[#FF3E00]/80">
+          <Loader className="w-3 h-3 animate-spin" />
+          <span>SYNTHESIZING...</span>
+        </span>
+      ) : isThisPlaying && isPlaying ? (
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={handleVoiceToggle}
+            className="flex items-center gap-1 text-white bg-[#FF3E00]/10 border border-[#FF3E00]/20 px-1.5 py-0.5 rounded cursor-pointer font-bold"
+          >
+            {isPaused ? <Play className="w-2.5 h-2.5 text-[#FF3E00]" /> : <Pause className="w-2.5 h-2.5 text-white" />}
+            <span>{isPaused ? "RESUME" : "PAUSE"}</span>
+          </button>
+          <button onClick={stop} className="flex items-center gap-1 hover:text-white cursor-pointer">
+            <VolumeX className="w-3 h-3 text-red-500/80" />
+            <span>STOP</span>
+          </button>
+          <div className="flex items-center gap-0.5 h-2 px-1 bg-black/10 rounded flex-row">
+            {[1, 2, 3].map((bar) => (
+              <motion.span
+                key={bar}
+                className="w-px bg-[#FF3E00] rounded-full origin-bottom"
+                initial={{ height: "20%" }}
+                animate={isPaused ? { height: "20%" } : { height: ["20%", "100%", "20%"] }}
+                transition={isPaused ? {} : {
+                  duration: 0.5 + bar * 0.1,
+                  repeat: Infinity,
+                  delay: bar * 0.05,
+                  ease: "easeInOut",
+                }}
+              />
+            ))}
+          </div>
+          <span className="text-[8px] text-[#FF3E00]/90 uppercase font-sans font-bold select-none truncate">
+            {voice || "Active Voice"}
+          </span>
+        </div>
+      ) : isStreaming ? (
+        <div className="flex items-center gap-1.5 text-white/20 select-none cursor-not-allowed font-medium font-mono">
+          <Loader className="w-3 h-3 animate-spin text-white/20" />
+          <span>SYNTHESIZING THOUGHTS...</span>
+        </div>
+      ) : (
+        <button
+          onClick={handleVoiceToggle}
+          className="flex items-center gap-1 hover:text-white cursor-pointer select-none text-white/40"
+        >
+          <Volume2 className="w-3 h-3 text-[#FF3E00]" />
+          <span>SPEAK Response</span>
+        </button>
+      )}
+    </div>
   );
 }

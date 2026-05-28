@@ -6,7 +6,8 @@ import {
   Palette, 
   Code2, 
   Database,
-  Cpu
+  Cpu,
+  GraduationCap
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { ModuleId } from '../types';
@@ -19,6 +20,7 @@ interface SidebarProps {
 const modules: { id: ModuleId; icon: any; label: string }[] = [
   { id: 'casual', icon: Cpu, label: 'CASUAL' },
   { id: 'command', icon: Terminal, label: 'COMMAND_CENTER' },
+  { id: 'academia', icon: GraduationCap, label: 'ACADEMIA_CORE' },
   { id: 'math', icon: Calculator, label: 'QUANT_SYNAPSE' },
   { id: 'language', icon: Languages, label: 'LANGUAGE' },
   { id: 'creative', icon: Palette, label: 'CREATIVE/EDIT' },

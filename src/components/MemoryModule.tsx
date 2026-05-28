@@ -21,6 +21,11 @@ export default function MemoryModule({ proficiency }: { proficiency: Proficiency
   const [capacity, setCapacity] = useState(0.24);
   const [maxCapacity, setMaxCapacity] = useState(2.0);
   const [isExpanding, setIsExpanding] = useState(false);
+  const [isChartReady, setIsChartReady] = useState(false);
+
+  useEffect(() => {
+    setIsChartReady(true);
+  }, []);
 
   const trendData = proficiency.map(p => ({
     name: p.subject,
@@ -224,25 +229,27 @@ export default function MemoryModule({ proficiency }: { proficiency: Proficiency
                   <h3 className="text-sm font-medium uppercase tracking-widest text-white/60">Competency_Trend</h3>
                 </div>
               </div>
-              <div className="h-40 w-full font-mono">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={trendData}>
-                    <defs>
-                      <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#FF3E00" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#FF3E00" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1A1A1A" vertical={false} />
-                    <XAxis dataKey="name" hide />
-                    <YAxis hide domain={[0, 100]} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: '#0A0A0A', border: '1px solid #1A1A1A', borderRadius: '4px', fontSize: '9px' }}
-                      itemStyle={{ color: '#FF3E00' }}
-                    />
-                    <Area type="monotone" dataKey="level" stroke="#FF3E00" fillOpacity={1} fill="url(#trendGradient)" />
-                  </AreaChart>
-                </ResponsiveContainer>
+              <div className="w-full min-w-0 min-h-[160px] h-40 font-mono relative">
+                {isChartReady && (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={trendData}>
+                      <defs>
+                        <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#FF3E00" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#FF3E00" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1A1A1A" vertical={false} />
+                      <XAxis dataKey="name" hide />
+                      <YAxis hide domain={[0, 100]} />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: '#0A0A0A', border: '1px solid #1A1A1A', borderRadius: '4px', fontSize: '9px' }}
+                        itemStyle={{ color: '#FF3E00' }}
+                      />
+                      <Area type="monotone" dataKey="level" stroke="#FF3E00" fillOpacity={1} fill="url(#trendGradient)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                )}
               </div>
               <div className="mt-4 text-[8px] font-mono text-white/20 uppercase tracking-[0.2em] text-center">
                 Adaptive Synapse mapping active

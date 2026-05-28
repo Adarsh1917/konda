@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Sigma, Binary, Zap, Layers } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -16,6 +16,11 @@ const data = [
 ];
 
 export default function MathModule() {
+  const [chartReady, setChartReady] = useState(false);
+  useEffect(() => {
+    setChartReady(true);
+  }, []);
+
   const proficiency: ProficiencyScore[] = useMemo(() => {
     const saved = localStorage.getItem('konda_proficiency');
     return saved ? JSON.parse(saved) : [];
@@ -63,25 +68,27 @@ export default function MathModule() {
                <div className="text-[9px] font-mono text-[#FF3E00] tracking-tighter uppercase opacity-40">Probability_Density_V2</div>
             </div>
             
-            <div className="flex-1 min-h-[300px]">
-               <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={data}>
-                    <defs>
-                      <linearGradient id="colorRed" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#FF3E00" stopOpacity={0.2}/>
-                        <stop offset="95%" stopColor="#FF3E00" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1A1A1A" vertical={false} />
-                    <XAxis dataKey="x" hide />
-                    <YAxis hide />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: '#0A0A0A', border: '1px solid #1A1A1A', borderRadius: '2px', fontSize: '10px' }}
-                      itemStyle={{ color: '#FF3E00' }}
-                    />
-                    <Area type="monotone" dataKey="y" stroke="#FF3E00" strokeWidth={1} fillOpacity={1} fill="url(#colorRed)" />
-                  </AreaChart>
-               </ResponsiveContainer>
+            <div className="w-full min-w-0 min-h-[300px] h-[300px] relative">
+               {chartReady && (
+                 <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={data}>
+                      <defs>
+                        <linearGradient id="colorRed" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#FF3E00" stopOpacity={0.2}/>
+                          <stop offset="95%" stopColor="#FF3E00" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1A1A1A" vertical={false} />
+                      <XAxis dataKey="x" hide />
+                      <YAxis hide />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: '#0A0A0A', border: '1px solid #1A1A1A', borderRadius: '2px', fontSize: '10px' }}
+                        itemStyle={{ color: '#FF3E00' }}
+                      />
+                      <Area type="monotone" dataKey="y" stroke="#FF3E00" strokeWidth={1} fillOpacity={1} fill="url(#colorRed)" />
+                    </AreaChart>
+                 </ResponsiveContainer>
+               )}
             </div>
 
             <div className="mt-6 flex justify-between items-end border-t border-[#1A1A1A] pt-4">

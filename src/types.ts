@@ -1,4 +1,4 @@
-export type ModuleId = 'command' | 'math' | 'language' | 'creative' | 'engineering' | 'memory' | 'casual';
+export type ModuleId = 'command' | 'math' | 'language' | 'creative' | 'engineering' | 'memory' | 'casual' | 'academia';
 
 export interface FileAttachment {
   id: string;
@@ -46,7 +46,7 @@ export interface ProficiencyScore {
 
 export type ThinkingStatus = 'idle' | 'thinking' | 'retrying_1' | 'retrying_2' | 'retrying_3' | 'retrying_4' | 'error';
 
-export type AIModel = 'auto' | 'gpt55' | 'claude_opus4' | 'gemini_pro' | 'gemini_flash' | 'deepseek_coder' | 'flux_image';
+export type AIModel = 'auto' | 'core' | 'sage' | 'vision' | 'swift' | 'forge' | 'canvas' | 'motion' | 'gpt55' | 'claude_opus4' | 'gemini_pro' | 'gemini_flash' | 'deepseek_coder' | 'flux_image';
 
 export interface OSState {
   currentModule: ModuleId;

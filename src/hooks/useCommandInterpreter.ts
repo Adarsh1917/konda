@@ -25,7 +25,7 @@ export const SYSTEM_COMMANDS: CommandDefinition[] = [
       dispatchClear();
       dispatchToast('All current active session logs cleared.');
     },
-    feedback: "Clearing session data right away, Chief!"
+    feedback: "Clearing session data right away."
   },
   {
     id: 'archive-session',
@@ -35,7 +35,7 @@ export const SYSTEM_COMMANDS: CommandDefinition[] = [
       dispatchArchive();
       dispatchToast('Current chat session archived successfully.');
     },
-    feedback: "Archiving current intelligence log into database, Boss."
+    feedback: "Archiving current intelligence log into database."
   },
   {
     id: 'open-dashboard',
@@ -44,7 +44,7 @@ export const SYSTEM_COMMANDS: CommandDefinition[] = [
     action: ({ dispatchModule }) => {
       dispatchModule('command');
     },
-    feedback: "Steering you to the Command Center dashboard, Boss."
+    feedback: "Steering you to the Command Center dashboard."
   },
   {
     id: 'open-casual',
@@ -116,7 +116,7 @@ export const SYSTEM_COMMANDS: CommandDefinition[] = [
     action: ({ setMood }) => {
       setMood('sarcastic');
     },
-    feedback: "Sarcastic engine engaged. Prepare yourself, Boss!"
+    feedback: "Sarcastic perspective filter engaged."
   },
   {
     id: 'mood-loyal',
@@ -125,7 +125,7 @@ export const SYSTEM_COMMANDS: CommandDefinition[] = [
     action: ({ setMood }) => {
       setMood('loyal');
     },
-    feedback: "Always watching your back, Chief. Loyalty protocols optimized."
+    feedback: "Loyalty protocols optimized. Operating within standard parameters."
   },
   {
     id: 'mood-analytical',
@@ -143,7 +143,7 @@ export const SYSTEM_COMMANDS: CommandDefinition[] = [
     action: ({ setMood }) => {
       setMood('chill');
     },
-    feedback: "Decompressing logic gates. Let's take it easy, Boss."
+    feedback: "Calibrating systems to relaxed operations state."
   },
   {
     id: 'mood-witty',

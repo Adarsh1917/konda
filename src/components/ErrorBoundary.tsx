@@ -10,7 +10,10 @@ import {
   ShieldAlert,
   ArrowRight,
   Terminal,
-  Clock
+  Clock,
+  Send,
+  CheckCircle2,
+  AlertOctagon
 } from 'lucide-react';
 
 interface Props {
@@ -22,16 +25,26 @@ interface State {
   error: Error | null;
   errorInfo: ErrorInfo | null;
   isStackVisible: boolean;
+  telemetryState: 'idle' | 'sending' | 'sent' | 'failed';
+  telemetryId: string | null;
+  telemetryError: string | null;
+  countdown: number;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
+  timerId: any = null;
+
   constructor(props: Props) {
     super(props);
     this.state = {
       hasError: false,
       error: null,
       errorInfo: null,
-      isStackVisible: false
+      isStackVisible: false,
+      telemetryState: 'idle',
+      telemetryId: null,
+      telemetryError: null,
+      countdown: -1
     };
   }
 
@@ -42,7 +55,88 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     this.setState({ errorInfo });
     console.error('Bujji Kernel Encountered Runtime Crash:', error, errorInfo);
+    this.sendTelemetry(error, errorInfo);
+    this.startAutoRecoveryTimer();
   }
+
+  componentWillUnmount() {
+    this.clearAutoRecoveryTimer();
+  }
+
+  startAutoRecoveryTimer = () => {
+    this.clearAutoRecoveryTimer();
+    this.setState({ countdown: 10 });
+    
+    this.timerId = setInterval(() => {
+      this.setState(prevState => {
+        if (prevState.countdown <= 1) {
+          this.clearAutoRecoveryTimer();
+          console.warn('Auto-recovery timer finished: executing soft-refresh reload.');
+          this.handleRestart();
+          return { countdown: 0 };
+        }
+        return { countdown: prevState.countdown - 1 };
+      });
+    }, 1000);
+  };
+
+  clearAutoRecoveryTimer = () => {
+    if (this.timerId) {
+      clearInterval(this.timerId);
+      this.timerId = null;
+    }
+  };
+
+  handlePauseCountdown = () => {
+    this.clearAutoRecoveryTimer();
+    this.setState({ countdown: -1 });
+  };
+
+  sendTelemetry = async (error: Error, errorInfo: ErrorInfo | null) => {
+    this.setState({ telemetryState: 'sending', telemetryError: null });
+    try {
+      const response = await fetch('/api/diagnostics/crash', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          errorName: error.name || 'ComponentFatalException',
+          errorMessage: error.message || error.toString(),
+          errorStack: error.stack || 'No stack trace recorded at browser.',
+          componentStack: errorInfo?.componentStack || 'No react component stack context available.',
+          userAgent: navigator.userAgent,
+          timestamp: new Date().toISOString()
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server returned HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (data.recorded && data.id) {
+        this.setState({ 
+          telemetryState: 'sent', 
+          telemetryId: data.id 
+        });
+      } else {
+        throw new Error('Telemetry payload was validated but missing registered ID.');
+      }
+    } catch (err: any) {
+      console.error('Failed to submit telemetry stream:', err);
+      this.setState({ 
+        telemetryState: 'failed', 
+        telemetryError: err.message || String(err) 
+      });
+    }
+  };
+
+  handleManualRetryTelemetry = () => {
+    if (this.state.error) {
+      this.sendTelemetry(this.state.error, this.state.errorInfo);
+    }
+  };
 
   handleRestart = () => {
     window.location.reload();
@@ -149,10 +243,10 @@ END OF DIAGNOSTIC FLIGHT REPORT. BUJJI SAYS: 'STAY COOL, BOSS!'
                   </div>
                 </div>
                 <h1 className="text-xl md:text-2xl font-sans tracking-tight font-semibold text-white">
-                  Bujji Kernel Logic Loop Interruption
+                  Kernel Logic Loop Interruption
                 </h1>
                 <p className="text-sm text-white/50 leading-relaxed max-w-md">
-                  Hey Boss, some of my internal holographic neural pathways collided. Don't panic — let's execute system recovery protocols and reset the workspace.
+                  A logic fault has been intercepted within the active running container. Let's execute standard system recovery protocols and reload the workspace.
                 </p>
               </div>
             </div>
@@ -167,6 +261,36 @@ END OF DIAGNOSTIC FLIGHT REPORT. BUJJI SAYS: 'STAY COOL, BOSS!'
                 {errorMsg}
               </div>
             </div>
+
+            {/* Dynamic Cybernetic Auto-Recovery Panel */}
+            {this.state.countdown >= 0 ? (
+              <div className="mb-6 p-4 rounded-xl border border-[#FF3E00]/20 bg-[#FF3E00]/5 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-pulse">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-[#FF3E00] animate-ping shrink-0" />
+                  <span className="font-sans text-white/80 leading-relaxed">
+                    Auto-Recovery engaged: Performing soft-refresh in <strong className="text-white font-mono text-[13px] bg-white/10 px-1.5 py-0.5 rounded border border-white/10">{this.state.countdown}s</strong>...
+                  </span>
+                </div>
+                <button 
+                  onClick={this.handlePauseCountdown}
+                  className="w-full sm:w-auto text-[9px] font-mono tracking-wide uppercase px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white/90 rounded-lg cursor-pointer transition-all active:scale-95 shadow-sm text-center font-bold"
+                >
+                  Pause Countdown
+                </button>
+              </div>
+            ) : (
+              <div className="mb-6 p-4 rounded-xl border border-white/5 bg-white/[0.02] text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <span className="text-white/40 font-mono tracking-wide">
+                  Autonomous timer paused by operator. Automatic soft-refresh disabled.
+                </span>
+                <button 
+                  onClick={this.startAutoRecoveryTimer}
+                  className="w-full sm:w-auto text-[9px] font-mono tracking-wide uppercase px-3 py-1.5 bg-[#FF3E00]/10 hover:bg-[#FF3E00]/20 border border-[#FF3E00]/20 text-[#FF551C] font-semibold rounded-lg cursor-pointer transition-all active:scale-95 text-center font-bold"
+                >
+                  Resume Countdown
+                </button>
+              </div>
+            )}
 
             {/* Collaborative Recovery Action Buttons */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
@@ -199,6 +323,62 @@ END OF DIAGNOSTIC FLIGHT REPORT. BUJJI SAYS: 'STAY COOL, BOSS!'
                 <span>Save Diagnostic File</span>
               </button>
 
+            </div>
+
+            {/* Real-time Telemetry Dispatcher Panel */}
+            <div className="mb-6 p-4 rounded-xl border bg-black/20 text-xs flex flex-col gap-2 transition-all duration-300 border-white/5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Send className={`w-3.5 h-3.5 ${this.state.telemetryState === 'sending' ? 'text-blue-400 animate-spin' : this.state.telemetryState === 'sent' ? 'text-emerald-400' : 'text-white/40'}`} />
+                  <span className="font-mono text-[9px] tracking-wider uppercase text-white/60">External Telemetry Monitor Sync</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {this.state.telemetryState === 'sending' && (
+                    <span className="text-[9px] text-blue-400 font-mono animate-pulse">Syncing...</span>
+                  )}
+                  {this.state.telemetryState === 'sent' && (
+                    <div className="flex items-center gap-1 text-[9px] text-emerald-400 font-mono font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                      <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
+                      <span>SECURE SYNC: ACTIVE</span>
+                    </div>
+                  )}
+                  {this.state.telemetryState === 'failed' && (
+                    <div className="flex items-center gap-1 text-[9px] text-red-400 font-mono font-bold bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20">
+                      <AlertOctagon className="w-2.5 h-2.5 text-red-400" />
+                      <span>SYNC FAIL</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="text-[11px] text-white/50 leading-relaxed font-sans">
+                {this.state.telemetryState === 'sending' && (
+                  <p>Attempting connection to telemetry receptor `/api/diagnostics/crash` to stream active register buffers and call frames...</p>
+                )}
+                {this.state.telemetryState === 'sent' && (
+                  <div className="space-y-1">
+                    <p>Fault report successfully transmitted and cataloged inside database core logs.</p>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <span className="text-[10px] text-white/30 font-mono">Telemetry Track ID:</span>
+                      <code className="text-[10px] font-mono text-emerald-400 bg-emerald-950/20 px-1.5 py-0.5 rounded border border-emerald-500/20 select-all">{this.state.telemetryId}</code>
+                    </div>
+                  </div>
+                )}
+                {this.state.telemetryState === 'failed' && (
+                  <div className="space-y-1.5">
+                    <p>Unable to push raw diagnostic parameters. Error: <span className="text-red-300 font-mono">{this.state.telemetryError || "Unknown Connection Failure"}</span></p>
+                    <button
+                      onClick={this.handleManualRetryTelemetry}
+                      className="text-[10px] font-semibold text-orange-400 hover:text-orange-300 hover:underline flex items-center gap-1 cursor-pointer bg-orange-500/5 hover:bg-orange-500/10 border border-orange-500/15 rounded-lg px-2 py-1 mt-1 font-mono active:scale-95 transition-all"
+                    >
+                      <span>⚡ Re-initialize Telemetry Transmission</span>
+                    </button>
+                  </div>
+                )}
+                {this.state.telemetryState === 'idle' && (
+                  <p>Awaiting fatal signature evaluation engine initialization...</p>
+                )}
+              </div>
             </div>
 
             {/* Collapsible Advanced Technical Fault Trace Area */}

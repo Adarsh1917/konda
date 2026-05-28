@@ -22,6 +22,7 @@ export default function CreativeModule() {
   const [editImage, setEditImage] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [sliderPos, setSliderPos] = useState(50);
+  const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
   const [assets, setAssets] = useState<Asset[]>(() => {
@@ -126,6 +127,7 @@ export default function CreativeModule() {
     if (!prompt.trim() || isGenerating) return;
 
     setIsGenerating(true);
+    setError(null);
     try {
       const now = new Date();
       let generatedUrl = '';
@@ -151,8 +153,9 @@ export default function CreativeModule() {
       setActiveAsset(newAsset);
       setPrompt('');
       if (activeTab === 'synthesis') setNegativePrompt('');
-    } catch (err) {
+    } catch (err: any) {
       console.error("[IMAGE_GENERATION_FAILED_OUTER] Error compiling dynamic assets", err);
+      setError(err.message || String(err));
     } finally {
       setIsGenerating(false);
     }
@@ -161,6 +164,7 @@ export default function CreativeModule() {
   const handleRegenerateVariation = async (asset: Asset) => {
     if (isGenerating) return;
     setIsGenerating(true);
+    setError(null);
     
     try {
       const now = new Date();
@@ -192,8 +196,9 @@ export default function CreativeModule() {
 
       setAssets(prev => [newAsset, ...prev]);
       setActiveAsset(newAsset);
-    } catch (err) {
+    } catch (err: any) {
       console.error("[VARIATION_GENERATION_FAILED] Could not synthesize asset variation", err);
+      setError(err.message || String(err));
     } finally {
       setIsGenerating(false);
     }
@@ -369,6 +374,13 @@ export default function CreativeModule() {
                       </div>
                     </div>
 
+                    {error && (
+                      <div className="p-3 bg-red-950/40 border border-red-800/40 text-red-400 text-xs font-mono rounded space-y-1">
+                        <div className="font-bold uppercase tracking-wider text-[10px]">⚠️ Synthesis Failure</div>
+                        <div className="text-[10px] whitespace-pre-wrap">{error}</div>
+                      </div>
+                    )}
+
                     <button 
                       type="submit"
                       disabled={isGenerating || !prompt.trim()}
@@ -486,6 +498,13 @@ export default function CreativeModule() {
                         Outpainting
                       </button>
                     </div>
+
+                    {error && (
+                      <div className="p-3 bg-red-950/40 border border-red-800/40 text-red-400 text-xs font-mono rounded space-y-1">
+                        <div className="font-bold uppercase tracking-wider text-[10px]">⚠️ Synthesis Failure</div>
+                        <div className="text-[10px] whitespace-pre-wrap">{error}</div>
+                      </div>
+                    )}
 
                     <button 
                       onClick={handleGenerate}

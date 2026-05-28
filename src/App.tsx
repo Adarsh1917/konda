@@ -7,6 +7,7 @@ import CreativeModule from './components/CreativeModule';
 import PolyglotModule from './components/PolyglotModule';
 import EngineeringModule from './components/EngineeringModule';
 import MemoryModule from './components/MemoryModule';
+import AcademiaModule from './components/AcademiaModule';
 import BujjiCompanion from './components/BujjiCompanion';
 import ShortcutManager from './components/ShortcutManager';
 import { useShortcuts } from './hooks/useShortcuts';
@@ -647,6 +648,8 @@ function ModuleSelector({ moduleId, messages, onSendMessage, onClearChat, onArch
       return <EngineeringModule />;
     case 'memory':
       return <MemoryModule proficiency={proficiency} />;
+    case 'academia':
+      return <AcademiaModule />;
     default:
       return null;
   }
