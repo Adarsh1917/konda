@@ -10,16 +10,39 @@ import MemoryModule from './components/MemoryModule';
 import AcademiaModule from './components/AcademiaModule';
 import BujjiCompanion from './components/BujjiCompanion';
 import ShortcutManager from './components/ShortcutManager';
+import SystemHealthModule from './components/SystemHealthModule';
 import { useShortcuts } from './hooks/useShortcuts';
 import { useAdaptiveLearning } from './hooks/useAdaptiveLearning';
 import { ModuleId, OSState, Message, Shortcut, ProficiencyScore, ThinkingStatus, FileAttachment, AIModel } from './types';
 import { kondaChat } from './services/kondaService';
 import { generateId, cn } from './lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
-import { Cpu, Power, Menu, X, Terminal, Share2, Check, Keyboard, Zap } from 'lucide-react';
+import { Cpu, Power, Menu, X, Terminal, Share2, Check, Keyboard, Zap, Lock, Unlock, Fingerprint } from 'lucide-react';
 
 export default function App() {
   const { proficiency, updateProficiency, getRecommendations } = useAdaptiveLearning();
+  const [isPowerOn, setIsPowerOn] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('konda_power_state') !== 'off';
+    }
+    return true;
+  });
+
+  const [isLocked, setIsLocked] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('konda_auth_dismissed') !== 'true';
+    }
+    return true;
+  });
+
+  const togglePower = useCallback(() => {
+    setIsPowerOn(prev => {
+      const next = !prev;
+      localStorage.setItem('konda_power_state', next ? 'on' : 'off');
+      return next;
+    });
+  }, []);
+
   const [state, setState] = useState<OSState>(() => {
     return {
       currentModule: 'casual',
@@ -264,6 +287,29 @@ export default function App() {
       return;
     }
 
+    if (!isPowerOn) {
+      const userMsgId = generateId();
+      const assistantMsgId = generateId();
+      const userMessage: Message = {
+        id: userMsgId,
+        role: 'user',
+        content,
+        timestamp: Date.now(),
+        files
+      };
+      const assistantMessage: Message = {
+        id: assistantMsgId,
+        role: 'assistant',
+        content: "⚠️ [OFFLINE_STATE] KONDA Neural Core operates under strict Power Standby constraints. Activating the top console Power Unit clears the dynamic compute locks.",
+        timestamp: Date.now() + 1
+      };
+      setState(s => ({
+        ...s,
+        messages: [...s.messages, userMessage, assistantMessage]
+      }));
+      return;
+    }
+
     // 1. Prevent multiple active streaming sessions & handle abort
     if (isGeneratingRef.current) {
       abortControllerRef.current?.abort();
@@ -410,6 +456,85 @@ export default function App() {
   return (
     <div id="os-root" className="fixed inset-0 bg-[#0A0A0A] flex overflow-hidden font-sans antialiased text-[#F5F5F5] selection:bg-[#FF3E00] selection:text-white">
       
+      {/* Biometric Credentials Lock Overlay Screen */}
+      <AnimatePresence>
+        {isLocked && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-[#060606] z-[9999] flex flex-col items-center justify-center p-6 select-none"
+          >
+            {/* Ambient Background Grid */}
+            <div className="absolute inset-0 bg-[linear-gradient(to_right,#FF3E0008_1px,transparent_1px),linear-gradient(to_bottom,#FF3E0008_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none" />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-[#FF3E00]/5 blur-[120px] rounded-full pointer-events-none" />
+
+            <motion.div 
+              initial={{ scale: 0.95, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: -15 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 180 }}
+              className="w-full max-w-sm bg-[#0A0A0A] border border-white/5 p-8 rounded-sm relative overflow-hidden"
+            >
+              {/* Corner Sci-fi brackets */}
+              <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-[#FF3E00]" />
+              <div className="absolute top-0 right-0 w-2 h-2 border-t border-r border-[#FF3E00]" />
+              <div className="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-[#FF3E00]" />
+              <div className="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-[#FF3E00]" />
+
+              <div className="flex flex-col items-center text-center space-y-6">
+                <div className="w-16 h-16 rounded-full border border-white/5 bg-[#050505] flex items-center justify-center relative group">
+                  <div className="absolute inset-0 rounded-full bg-[#FF3E00]/10 opacity-30 animate-ping group-hover:scale-110 pointer-events-none" />
+                  <Fingerprint className="w-6 h-6 text-[#FF3E00]" />
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-[10px] tracking-[0.35em] uppercase font-bold text-[#FF3E00]">OPERATOR_AUTHENTICATOR</div>
+                  <h3 className="text-xl font-light tracking-tight text-white uppercase">CORTEX INTERFACE GATEWAY</h3>
+                </div>
+
+                <div className="w-full space-y-4">
+                  <div className="space-y-1.5 text-left">
+                    <label className="text-[8px] font-mono uppercase tracking-widest text-[#FF3E00]/70 font-bold">Designated Operator ID</label>
+                    <input 
+                      type="text" 
+                      readOnly 
+                      value="kondaadarsh163@gmail.com"
+                      className="w-full bg-[#050505] border border-white/5 font-mono text-[10px] text-white/50 px-3 py-2 rounded-sm cursor-not-allowed select-all"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5 text-left">
+                    <label className="text-[8px] font-mono uppercase tracking-widest text-white/40">Secure Session PIN / Keys</label>
+                    <input 
+                      type="password" 
+                      placeholder="••••••••••••••••••••••••"
+                      value="163_bypass_token"
+                      readOnly
+                      className="w-full bg-[#050505] border border-white/5 font-mono text-[10px] text-[#FF3E00] px-3 py-2 rounded-sm tracking-widest outline-none focus:border-[#FF3E00]/50 transition-colors cursor-default"
+                    />
+                  </div>
+                </div>
+
+                <button 
+                  onClick={() => {
+                    localStorage.setItem('konda_auth_dismissed', 'true');
+                    setIsLocked(false);
+                  }}
+                  className="w-full py-3 bg-[#FF3E00] hover:bg-[#FF3E00]/95 text-black font-bold font-mono text-[9px] uppercase tracking-widest rounded-sm transition-all shadow-[0_0_20px_rgba(255,62,0,0.2)] hover:shadow-[0_0_25px_rgba(255,62,0,0.35)] cursor-pointer"
+                >
+                  Authorize Console Session
+                </button>
+
+                <div className="text-[8px] font-mono uppercase tracking-[0.15em] text-white/20">
+                  SECURE CRYPTOGRAPHIC BOUNDARY HANDSHAKE
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
       {/* Background Decorative Element */}
       <div className="absolute top-[-200px] left-[-200px] w-[600px] h-[600px] border border-white/5 rounded-full pointer-events-none z-0" />
       <div className="absolute top-[-100px] left-[-100px] w-[400px] h-[400px] border border-[#FF3E00]/10 rounded-full pointer-events-none z-0" />
@@ -525,9 +650,34 @@ export default function App() {
                   )}
                 </AnimatePresence>
               </button>
-              <div className="w-8 h-8 border border-[#333] rounded-full flex items-center justify-center text-[10px] hover:border-[#FF3E00] cursor-pointer transition-all hover:text-[#FF3E00] group">
+              <button 
+                onClick={() => {
+                  localStorage.removeItem('konda_auth_dismissed');
+                  setIsLocked(true);
+                }}
+                className="w-8 h-8 border border-[#333] text-neutral-500 hover:border-[#FF3E00]/40 hover:text-[#FF3E00] rounded-full flex items-center justify-center text-[10px] cursor-pointer transition-all group relative"
+                title="Lock Terminal Console"
+              >
+                <Lock className="w-3 h-3 group-hover:scale-110 transition-transform" />
+                <span className="absolute -bottom-8 right-0 bg-[#0A0A0A] border border-white/5 text-[7px] font-mono whitespace-nowrap px-1 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-wider rounded pointer-events-none">
+                  SYS_LOCK
+                </span>
+              </button>
+              <button 
+                onClick={togglePower}
+                className={cn(
+                  "w-8 h-8 border rounded-full flex items-center justify-center text-[10px] cursor-pointer transition-all group relative",
+                  isPowerOn 
+                    ? "border-[#FF3E00]/40 text-[#FF3E00] hover:bg-[#FF3E00]/10 shadow-[0_0_10px_rgba(255,62,0,0.15)] animate-pulse" 
+                    : "border-[#333] text-neutral-500 hover:border-red-500 hover:text-red-500"
+                )}
+                title={isPowerOn ? "Shut Down OS Core Terminal" : "Boot Up OS Core Terminal"}
+              >
                 <Power className="w-3 h-3 group-hover:scale-110 transition-transform" />
-              </div>
+                <span className="absolute -bottom-8 right-0 bg-[#0A0A0A] border border-white/5 text-[7px] font-mono whitespace-nowrap px-1 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-wider rounded pointer-events-none">
+                  {isPowerOn ? "SYS_ON" : "SYS_OFF"}
+                </span>
+              </button>
             </div>
           </div>
         </header>
@@ -650,6 +800,8 @@ function ModuleSelector({ moduleId, messages, onSendMessage, onClearChat, onArch
       return <MemoryModule proficiency={proficiency} />;
     case 'academia':
       return <AcademiaModule />;
+    case 'health':
+      return <SystemHealthModule />;
     default:
       return null;
   }

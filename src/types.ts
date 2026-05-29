@@ -1,4 +1,4 @@
-export type ModuleId = 'command' | 'math' | 'language' | 'creative' | 'engineering' | 'memory' | 'casual' | 'academia';
+export type ModuleId = 'command' | 'math' | 'language' | 'creative' | 'engineering' | 'memory' | 'casual' | 'academia' | 'health';
 
 export interface FileAttachment {
   id: string;

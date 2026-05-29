@@ -7,7 +7,8 @@ import {
   Code2, 
   Database,
   Cpu,
-  GraduationCap
+  GraduationCap,
+  Activity
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { ModuleId } from '../types';
@@ -26,6 +27,7 @@ const modules: { id: ModuleId; icon: any; label: string }[] = [
   { id: 'creative', icon: Palette, label: 'CREATIVE/EDIT' },
   { id: 'engineering', icon: Code2, label: 'GOD_INTEL_OS' },
   { id: 'memory', icon: Database, label: 'COLLECTIVE_BANK' },
+  { id: 'health', icon: Activity, label: 'SYSTEM_HEALTH' },
 ];
 
 export default function Sidebar({ currentModule, onModuleChange }: SidebarProps) {
