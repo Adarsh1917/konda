@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Layers, Box, Maximize, Palette, Sparkles, Image as ImageIcon, Download, Copy, Loader2, Send, Upload, Wand2, RefreshCcw } from 'lucide-react';
 import { cn, generateId } from '../lib/utils';
 import { generateAIImage, editAIImage } from '../services/kondaService';
+import { triggerSystemNotification } from '../utils/notificationHelper';
 
 interface Asset {
   id: string;
@@ -153,9 +154,21 @@ export default function CreativeModule() {
       setActiveAsset(newAsset);
       setPrompt('');
       if (activeTab === 'synthesis') setNegativePrompt('');
+      
+      triggerSystemNotification(
+        activeTab === "edit" ? "Image Refinement Completed" : "Image Synthesis Completed",
+        `Successfully generated asset with style preset: ${stylePreset}.`,
+        generatedUrl
+      ).catch(console.warn);
     } catch (err: any) {
       console.error("[IMAGE_GENERATION_FAILED_OUTER] Error compiling dynamic assets", err);
       setError(err.message || String(err));
+      
+      triggerSystemNotification(
+        "Image Synthesis Failed",
+        `Reason: ${err.message || String(err)}`,
+        "/favicon.ico"
+      ).catch(console.warn);
     } finally {
       setIsGenerating(false);
     }
@@ -196,9 +209,21 @@ export default function CreativeModule() {
 
       setAssets(prev => [newAsset, ...prev]);
       setActiveAsset(newAsset);
+      
+      triggerSystemNotification(
+        "Asset Variation Completed",
+        `Successfully synthesized an alternative layout variation.`,
+        generatedUrl
+      ).catch(console.warn);
     } catch (err: any) {
       console.error("[VARIATION_GENERATION_FAILED] Could not synthesize asset variation", err);
       setError(err.message || String(err));
+      
+      triggerSystemNotification(
+        "Asset Variation Failed",
+        `Reason: ${err.message || String(err)}`,
+        "/favicon.ico"
+      ).catch(console.warn);
     } finally {
       setIsGenerating(false);
     }

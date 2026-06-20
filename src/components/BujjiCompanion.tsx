@@ -35,6 +35,9 @@ export default function BujjiCompanion({
   const [showNotification, setShowNotification] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'optic' | 'memory' | 'logs'>('optic');
   const [shouldSimulateCrash, setShouldSimulateCrash] = useState(false);
+  const [personalPreference, setPersonalPreference] = useState<string>(() => {
+    return localStorage.getItem('bujji_personal_preference') || '';
+  });
 
   useEffect(() => {
     localStorage.setItem('bujji_mood', bujjiMood);
@@ -122,6 +125,18 @@ export default function BujjiCompanion({
       } catch (e) {}
     }
   }, [messages]);
+
+  // Listen for custom Personal OS style notifications
+  useEffect(() => {
+    const handleBujjiNotif = (e: any) => {
+      if (e.detail) {
+        setShowNotification(e.detail);
+        setTimeout(() => setShowNotification(null), 4000);
+      }
+    };
+    window.addEventListener('bujji_notification', handleBujjiNotif as EventListener);
+    return () => window.removeEventListener('bujji_notification', handleBujjiNotif as EventListener);
+  }, []);
 
   // Bujji Voice response handling
   const speakWithBujjiVoice = useCallback((text: string) => {
@@ -606,11 +621,11 @@ export default function BujjiCompanion({
               </div>
 
               {/* Status metrics bar */}
-              <div className="w-full grid grid-cols-3 gap-2 mt-8 text-center text-white/50">
+              <div className="w-full grid grid-cols-3 gap-2 mt-8 text-center text-white/50 w-full">
                 <div className="p-2 border border-white/5 bg-[#0A0A0A] rounded">
                   <div className="text-[8px] uppercase tracking-wider text-white/30 font-mono">CPU TEMP</div>
-                  <div className={cn("text-xs font-mono font-bold transition-colors mt-0.5", cpuTemp > 45 ? "text-amber-500" : "text-white")}>
-                    {cpuTemp}°C
+                  <div className="text-xs font-mono font-bold transition-colors mt-0.5 text-white/40">
+                    Unavailable
                   </div>
                 </div>
                 <div className="p-2 border border-white/5 bg-[#0A0A0A] rounded">
@@ -621,8 +636,8 @@ export default function BujjiCompanion({
                 </div>
                 <div className="p-2 border border-white/5 bg-[#0A0A0A] rounded">
                   <div className="text-[8px] uppercase tracking-wider text-white/30 font-mono">ROUTER</div>
-                  <div className="text-xs font-mono font-bold mt-0.5 text-[#FF3E00]">
-                    STABLE
+                  <div className={cn("text-xs font-mono font-bold mt-0.5", typeof navigator !== 'undefined' && navigator.onLine ? "text-[#FF3E00]" : "text-amber-500")}>
+                    {typeof navigator !== 'undefined' && navigator.onLine ? "ONLINE" : "OFFLINE"}
                   </div>
                 </div>
               </div>
@@ -660,6 +675,40 @@ export default function BujjiCompanion({
                     <span>{item.label}</span>
                   </button>
                 ))}
+              </div>
+            </div>
+
+            {/* Bujji Personal Chat Preference */}
+            <div className="p-3 bg-black/30 border border-white/5 rounded-xl space-y-2">
+              <div className="flex items-center justify-between text-[9px] font-mono text-white/40 uppercase">
+                <div className="flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-[#FF3E00]" />
+                  <span>Personal preference</span>
+                </div>
+                {personalPreference && (
+                  <button 
+                    onClick={() => {
+                      setPersonalPreference('');
+                      localStorage.removeItem('bujji_personal_preference');
+                      addLog("Cleared custom companion directive.");
+                    }}
+                    className="text-[7.5px] text-[#FF3E00] hover:underline uppercase font-bold"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <textarea
+                value={personalPreference}
+                onChange={(e) => {
+                  setPersonalPreference(e.target.value);
+                  localStorage.setItem('bujji_personal_preference', e.target.value);
+                }}
+                placeholder="Instruct Bujji: e.g. 'Use pirate lingo', 'Keep it simple/educational', 'Add translation at the bottom'..."
+                className="w-full h-16 bg-black/50 border border-white/10 rounded-lg p-2 text-[10px] font-mono text-white/90 placeholder-white/20 focus:outline-none focus:border-[#FF3E00]/50 resize-none transition-colors"
+              />
+              <div className="text-[7.5px] text-white/30 font-mono text-right uppercase">
+                *Directive is injected dynamically on every call
               </div>
             </div>
 

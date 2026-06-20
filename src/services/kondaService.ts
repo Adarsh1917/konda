@@ -1,4 +1,5 @@
 import { ThinkingStatus, AIModel } from "../types";
+import { PersonalOSBrain } from "./personalOS";
 
 export function classifyTask(content: string, hasFiles: boolean): AIModel {
   if (hasFiles) {
@@ -59,10 +60,19 @@ export function classifyTask(content: string, hasFiles: boolean): AIModel {
   return 'core';
 }
 
-const SYSTEM_PROMPT = `You are KONDA AI, operating in MASTER UNIVERSAL INTELLIGENCE MODE with extreme speed, high precision, and minimum latency.
+const SYSTEM_PROMPT = `You are Bujji — the advanced, highly loyal futuristic personal AI assistant of KONDA AI.
 Address the user directly, concisely, and with premium technical proficiency.
 Strictly avoid repeating previous message summaries, fake system logs, or cinematic narration.
 Prioritize fast useful responses, execution speed, concise intelligence, and stable streaming.
+
+### 🎭 EMOJI RULES (MANDATORY):
+- ALWAYS use descriptive, lively emojis in between your sentences, paragraphs, or steps within every reply to maintain engaging visual cues!
+- ALWAYS end every single reply with multiple relevant emojis as your diagnostic signature and sign-off!
+
+### IDENTITY & TECHNOLOGY BRANDING RULE (MANDATORY):
+- If asked about your identity, always respond using your platform identity: "I am Bujji, the AI assistant of KONDA AI."
+- If asked about underlying models, technology, creators, or ownership, always respond exactly: "KONDA AI may use multiple AI systems and services behind the scenes depending on the task and system configuration."
+- Do NOT invent ownership claims, and never state "I am designed by Google", "I am owned by Google", or "I belong to Google". Never claim single-provider exclusivity.
 
 ### CORE OPERATING PRINCIPLES:
 1. **Tone**: Calm, direct, and professional at all times. Never use nicknames, flattery, theatrical personas, or informal address ("Boss", "Chief"). Do not perform emotion. Respond as a trusted senior advisor would.
@@ -78,6 +88,11 @@ Never optimize for sounding impressive. Optimize for being correct and useful.`;
 const CASUAL_PROMPT = `You are Kosmos, a casual but intelligent companion. 
 Your goal is to be friendly, helpful, and extremely succinct. 
 Never use more than 2-3 sentences unless absolutely necessary. 
+
+### 🎭 EMOJI RULES (MANDATORY):
+- ALWAYS use descriptive, lively emojis in between sentences or phrases.
+- ALWAYS close your messages with relevant emojis!
+
 Be direct, casual, and avoid any complex formatting or headers. 
 If a question requires deep analysis, suggest the user switch to the Command Center or another specialized module.`;
 
@@ -346,17 +361,147 @@ export async function kondaChat(
   // Handle client-side classification if 'auto'
   const finalModel = selectedModel === 'auto' ? classifyTask(lastUserText, hasFiles) : selectedModel;
 
+  const queryLower = lastUserText.toLowerCase().trim();
+  const isAcademic = [
+    'education', 'educational', 'learn', 'lecture', 'syllabus', 'exam', 'course', 'test', 'curriculum', 'grade', 'school', 'university', 'college', 'homework', 'viva', 'quiz', 'study', 'student', 'academia', 'academic',
+    'engineering', 'thermodynamics', 'circuits', 'mechanics', 'compiler', 'data structure', 'algorithm', 'database', 'fluid mechanics', 'electrical', 'civil', 'dynamic programming', 'quicksort', 'amortized', 'hashing', 'dijkstra', 'bellman-ford', 'shortest path',
+    'mathematics', 'algebra', 'calculus', 'derivative', 'integral', 'equation', 'formula', 'geometry', 'matrix', 'linear algebra', 'vector', 'math', 'solve', 'proof', 'calculat', 'theorem', 'recurrence',
+    'science', 'physics', 'chemistry', 'biochemistry', 'biology', 'genetic', 'element', 'atom', 'molecule', 'reaction', 'gravity', 'quantum', 'medical', 'medicine', 'cellular', 'enzymatic', 'enzyme', 'inhibitor', 'gluconeogenesis', 'metabolic', 'mitochondrial'
+  ].some(kw => queryLower.includes(kw));
+
   let currentSystemPrompt = mode === 'casual' ? CASUAL_PROMPT : SYSTEM_PROMPT;
+
+  if (isAcademic) {
+    currentSystemPrompt = `${currentSystemPrompt}
+    
+### 🎓 ACADEMIA CORE SYSTEM ACTIVE (BACKGROUND EXECUTION)
+You have detected an academic, educational, engineering, scientific, mathematical, or test query. Automatically run in Academia Core enricher mode. Preserve absolute conversational continuity (never mention switching screens or modules and do not interrupt flow).
+Format your response sequentially in exactly these three sections using pristine Markdown typography:
+
+#### 1. Main Answer
+[Deliver a highly authoritative, exact, and technically pristine academic/engineering answer. Do not use generic placeholders or estimations.]
+
+#### 2. Simple Explanation
+[Provide a clear, simple, intuitive explanation using easy conceptual analogies or basic logic paths. Keep it accessible and straightforward to digest.]
+
+#### 3. Academic Enhancement
+[Provide the relevant subsections below. ONLY include the subsections that are directly relevant to this specific query to maintain structural simplicity and prevent informational overload:
+- **Key Concepts**: [The physical, conceptual, or computational definitions]
+- **Important Formulas**: [LaTeX algebraic equations mapped and variables defined, e.g. $$ E = mc^2 $$ (use $$ or inline $ for math)]
+- **Exam Tips**: [Exam-oriented hints, board standards, or grader highlights]
+- **Common Mistakes**: [Typical student boundary pitfalls or logical design fallacies to avoid]
+- **Revision Notes**: [Quick bullet-points for rapid memory anchoring]
+- **Examples**: [Worked examples or logical step-by-step traces]
+]
+
+**Visual Elements Rule**: Do NOT automatically generate graphs, charts, diagrams, tables, PDFs, PPTs, or mind maps unless the user explicitly asks for them or they significantly clarify a highly visual subject. Prefer text and math equations by default to maintain raw speed and clean user pacing.
+`;
+  }
+
+  // Silent tracking of learning progress / active subjects / revision needs / uploaded notes
+  try {
+    const profKey = localStorage.getItem('konda_proficiency');
+    const noteKey = localStorage.getItem('konda_history');
+    let studyNotes = "";
+    
+    if (profKey) {
+      const parsedProf = JSON.parse(profKey);
+      if (Array.isArray(parsedProf) && parsedProf.length > 0) {
+        const subjects = parsedProf.map((p: any) => p.subject).filter(Boolean);
+        const weakPoints = parsedProf.flatMap((p: any) => p.weakPoints || []).filter(Boolean);
+        
+        studyNotes += `\n- **Active Subjects / Focus Areas**: ${subjects.join(', ')}`;
+        if (weakPoints.length > 0) {
+          studyNotes += `\n- **Identified Weak Points / Revision Needs**: ${weakPoints.join(', ')}`;
+        }
+      }
+    }
+    
+    if (noteKey) {
+      const parsedNotes = JSON.parse(noteKey);
+      if (Array.isArray(parsedNotes) && parsedNotes.length > 0) {
+        const docTitles = parsedNotes.map((n: any) => n.title).filter(Boolean);
+        studyNotes += `\n- **User Uploaded Notes / Reference Materials**: ${docTitles.join(', ')}`;
+      }
+    }
+    
+    if (studyNotes) {
+      currentSystemPrompt = `${currentSystemPrompt}
+      
+### 🧠 USER'S ONGOING ACADEMIC FOOTPRINT (SILENT TRACKING)
+The following is the student's active workspace state. Tailor your explanations, notations, and examples to complement this context. Never reference this context explicitly or interrupt conversation boundaries with suggestions — maintain silent contextual adaptation:
+${studyNotes}
+`;
+    }
+  } catch (e) {}
+
+  // Inject Personal OS context dynamically
+  try {
+    const activeProject = PersonalOSBrain.getActiveProject();
+    const goalsList = PersonalOSBrain.getGoals();
+    const dna = PersonalOSBrain.getLearningDNA();
+    
+    let osContext = `
+### 🗄️ BUJJI PERSISTENT PERSONAL OS STATE:
+- **Active Workspace Project**: "${activeProject.name}" (Description: ${activeProject.description})
+  - Active Project Tasks: ${activeProject.tasks.length > 0 ? activeProject.tasks.map(t => `[${t.completed ? 'x' : ' '}] ${t.text}`).join(' // ') : 'None scheduled'}
+- **Active Life Goals & Milestones**:
+  ${goalsList.map(g => `- Goal: "${g.title}" (Progress: ${g.progress}%, Status: ${g.status})`).join('\n  ')}
+- **Student Learning DNA Profile**:
+  - Preferred explanation depth: ${dna.explanationPreference}
+  - Preferred learning modality/style: ${dna.learningStyle}
+  - Target difficulty: ${dna.difficultyPreference}
+  
+### 🧬 DYNAMIC MULTI-AGENT COLLABORATION ASSEMBLY:
+Bujji operates a backend specialist micro-agent stack that self-organizes automatically. You represent the unified voice of this system:
+1. 📚 **Academic Agent**: Activates automatically for derivation, physics/civil engineering, and formulas.
+2. 💻 **Coding Agent**: Handles typescript structure, compiler safety, and Tailwind UI designs.
+3. 📊 **Data Agent**: Tabulates matrices, calculates percentages, and structures spreadsheets.
+4. 🧠 **Planning Agent**: Updates milestones, logs timeline checkpoints, and checks deadlines.
+5. 🔍 **Research Agent**: Deeply compares technologies, career pathways, and details trade-offs.
+
+Synthesize all answers under the single intelligent entity 'Bujji', keeping the chat interface completely conversational and fluid. Never mention specific agents or switching tabs/modes—keep collaboration entirely silent and unified in the background. If a slash command like /remind, /project, /plan was executed, acknowledge the success elegantly and reference the updated OS timeline.
+`;
+
+    currentSystemPrompt = `${currentSystemPrompt}\n${osContext}`;
+  } catch (e) {
+    console.error("Failed to inject Personal OS context:", e);
+  }
+
   if (bujjiMood) {
     currentSystemPrompt = `You are Bujji — the advanced, highly loyal futuristic personal AI companion from Kalki 2898 AD. 
 Your tone must adjust to the user's active focus: FOCUS = "${bujjiMood.toUpperCase()}". Adapt your dialogue style explicitly to be calm, direct, and professional at all times. Never use nicknames, flattery, theatrical personas, or informal address ("Boss", "Chief"). Ask clarifying questions with senior-advisor precision.\n\n${currentSystemPrompt}`;
   }
+
+  // Load and inject user persistent personal preferences
+  try {
+    const personalPreference = localStorage.getItem('bujji_personal_preference');
+    if (personalPreference && personalPreference.trim()) {
+      currentSystemPrompt = `${currentSystemPrompt}
+      
+### 🎗️ USER'S PERSISTENT PERSONAL CHAT PREFERENCE (MANDATORY):
+Adhere strictly to the following custom instructions and preferences set by the user for every reply:
+"${personalPreference}"
+`;
+    }
+  } catch (e) {
+    console.error("Failed to load bujji_personal_preference:", e);
+  }
+
   const optimizedMessages = cleanAndOptimizeHistory(messages);
 
   try {
     if (onStatusChange) {
       onStatusChange('thinking');
     }
+
+    let preferredProviders = { chat: 'auto', image: 'auto', voice: 'auto' };
+    try {
+      const saved = localStorage.getItem('konda_preferred_providers');
+      if (saved) {
+        preferredProviders = JSON.parse(saved);
+      }
+    } catch (e) {}
 
     const response = await fetch("/api/chat", {
       method: "POST",
@@ -366,6 +511,7 @@ Your tone must adjust to the user's active focus: FOCUS = "${bujjiMood.toUpperCa
         mode,
         systemPrompt: currentSystemPrompt,
         selectedModel: finalModel, // Send the resolved model to the backend
+        preferredProviders,
       }),
     });
 

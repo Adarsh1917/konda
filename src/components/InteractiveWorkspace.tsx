@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from "motion/react";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import "jspdf-autotable";
+import { triggerSystemNotification } from "../utils/notificationHelper";
 import { 
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, 
   LineChart, Line, PieChart, Pie, Cell, ScatterChart, Scatter
@@ -1692,6 +1693,12 @@ function Exporter({ file }: { file: WorkspaceFile }) {
 
   const triggerExport = (format: string) => {
     setIsOpen(false);
+    
+    triggerSystemNotification(
+      "Asset Export Initiated",
+      `Converting and downloading "${file.title}" in ${format.toUpperCase()} format.`,
+      "/favicon.ico"
+    ).catch(console.warn);
     
     if (format === "csv" && file.type === "spreadsheet") {
       const headers = file.data.headers.join(",");

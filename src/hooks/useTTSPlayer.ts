@@ -314,7 +314,71 @@ export function useTTSPlayer() {
         });
       }
     } catch (err: any) {
-      console.error("TTS play failure:", err);
+      console.warn("[TTS_PLAY_FAILURE] Premium voice synthesis failed. Activating native Web Speech fallback...", err);
+      
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window && globalState.playingId === messageId) {
+        try {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(sanitizedText);
+          
+          // Select an appropriate conversational voice
+          const voices = window.speechSynthesis.getVoices();
+          const bujjiOpt = voices.find(v => 
+            v.name.includes('Google UK English Female') || 
+            v.lang.includes('en-GB') || 
+            v.lang.includes('en-IN')
+          ) || voices.find(v => v.lang.startsWith('en')) || voices[0];
+          
+          if (bujjiOpt) {
+            utterance.voice = bujjiOpt;
+          }
+          
+          // Set standard, beautiful, natural rates
+          utterance.pitch = 1.05;
+          utterance.rate = 0.95;
+          
+          utterance.onend = () => {
+            if (globalState.playingId === messageId) {
+              updateGlobalState({
+                playingId: null,
+                isPlaying: false,
+                isPaused: false,
+                engine: null,
+                voice: null
+              });
+            }
+          };
+          
+          utterance.onerror = (e) => {
+            console.error("[TTS_FALLBACK_ERROR] Web speech synthesis failed:", e);
+            if (globalState.playingId === messageId) {
+              updateGlobalState({
+                playingId: null,
+                isPlaying: false,
+                isPaused: false,
+                isLoading: false,
+                error: "Web speech synthesis failed to vocalize.",
+                engine: null,
+                voice: null
+              });
+            }
+          };
+          
+          window.speechSynthesis.speak(utterance);
+          
+          updateGlobalState({
+            isLoading: false,
+            isPlaying: true,
+            isPaused: false,
+            engine: "Web Speech Synthesis Fallback",
+            voice: bujjiOpt ? `${bujjiOpt.name} (Local Browser)` : "Local Browser System"
+          });
+          return;
+        } catch (fallbackErr) {
+          console.error("[TTS_FALLBACK_CRITICAL] Web speech fallback execution crashed:", fallbackErr);
+        }
+      }
+
       if (globalState.playingId === messageId) {
         updateGlobalState({
           playingId: null,
@@ -331,16 +395,25 @@ export function useTTSPlayer() {
 
   const pause = useCallback(() => {
     playerInstance.pause();
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.pause();
+    }
     updateGlobalState({ isPaused: true });
   }, []);
 
   const resume = useCallback(() => {
     playerInstance.resume();
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.resume();
+    }
     updateGlobalState({ isPaused: false });
   }, []);
 
   const stop = useCallback(() => {
     playerInstance.stop();
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
     updateGlobalState({
       playingId: null,
       isPlaying: false,

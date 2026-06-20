@@ -1,6 +1,6 @@
 {
   "name": "Konda",
-  "description": "A next-generation Personal OS and Agent for elite productivity, creative direction, mathematics, and polyglot translation.",
+  "description": "KONDA AI - A next-generation conversational Personal Operating System named Bujji, designed for production-level reliability, persistent project memory, and silent academic enrichment.",
   "requestFramePermissions": ["microphone", "camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

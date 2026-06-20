@@ -13,12 +13,20 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
+import { triggerSystemNotification } from '../utils/notificationHelper';
 import { Message, SavedSession, ProficiencyScore, ThinkingStatus, FileAttachment, AIModel } from '../types';
 import { useVoice } from '../hooks/useVoice';
 import { useTTSPlayer } from '../hooks/useTTSPlayer';
 import { StreamingMarkdown } from './StreamingMarkdown';
 import { useTypingAssistant } from '../hooks/useTypingAssistant';
 import InteractiveWorkspace, { WorkspaceFile } from './InteractiveWorkspace';
+import BrainSwitcher from './BrainSwitcher';
+import { PersonalOSBrain } from '../services/personalOS';
+import { FolderHeart, TrendingUp, CheckSquare, Sparkles, Clock, ArrowUpRight, Activity as ActivityIcon } from 'lucide-react';
+import { 
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as ChartTooltip, Legend, 
+  LineChart, Line, PieChart, Pie, Cell 
+} from 'recharts';
 
 // Extend jsPDF with autotable types
 declare module 'jspdf' {
@@ -59,6 +67,95 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [sessionTitle, setSessionTitle] = useState('');
+  const [activeProvider, setActiveProvider] = useState('Auto Router');
+  const [inlineAssetViews, setInlineAssetViews] = useState<Record<string, 'table' | 'chart'>>({});
+  const [inlineChartTypes, setInlineChartTypes] = useState<Record<string, 'bar' | 'line' | 'pie'>>({});
+
+  // Bujji OS Persistent States
+  const [isBujjiPanelOpen, setIsBujjiPanelOpen] = useState(false);
+  const [bujjiProjects, setBujjiProjects] = useState<any[]>([]);
+  const [activeProject, setActiveProject] = useState<any>(null);
+  const [bujjiTimeline, setBujjiTimeline] = useState<any[]>([]);
+  const [bujjiGoals, setBujjiGoals] = useState<any[]>([]);
+  const [bujjiDNA, setBujjiDNA] = useState<any>(null);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectDesc, setNewProjectDesc] = useState('');
+  const [newGoalTitle, setNewGoalTitle] = useState('');
+
+  const refreshBujjiOS = () => {
+    try {
+      setBujjiProjects(PersonalOSBrain.getProjects());
+      setActiveProject(PersonalOSBrain.getActiveProject());
+      setBujjiTimeline(PersonalOSBrain.getTimeline());
+      setBujjiGoals(PersonalOSBrain.getGoals());
+      setBujjiDNA(PersonalOSBrain.getLearningDNA());
+    } catch (e) {
+      console.error("OS State syncing failed:", e);
+    }
+  };
+
+  useEffect(() => {
+    refreshBujjiOS();
+    window.addEventListener('focus', refreshBujjiOS);
+    window.addEventListener('bujji_notification', refreshBujjiOS);
+    return () => {
+      window.removeEventListener('focus', refreshBujjiOS);
+      window.removeEventListener('bujji_notification', refreshBujjiOS);
+    };
+  }, []);
+
+  const toggleProjectTask = (taskId: string) => {
+    PersonalOSBrain.updateActiveProject((proj) => {
+      const task = proj.tasks.find(t => t.id === taskId);
+      if (task) {
+        task.completed = !task.completed;
+      }
+    });
+    refreshBujjiOS();
+  };
+
+  const createNewProject = () => {
+    if (!newProjectName.trim()) return;
+    const newProj = PersonalOSBrain.createProject(newProjectName.trim(), newProjectDesc.trim() || 'Custom project hub');
+    PersonalOSBrain.setActiveProject(newProj.id);
+    setNewProjectName('');
+    setNewProjectDesc('');
+    refreshBujjiOS();
+    window.dispatchEvent(new CustomEvent('bujji_notification', { detail: `Project "${newProjectName}" created successfully.` }));
+  };
+
+  const createNewGoal = () => {
+    if (!newGoalTitle.trim()) return;
+    PersonalOSBrain.addGoal(newGoalTitle.trim(), new Date(Date.now() + 3600 * 24000 * 30).toISOString().split('T')[0], ["Review materials", "Complete test", "Finish homework"]);
+    setNewGoalTitle('');
+    refreshBujjiOS();
+    window.dispatchEvent(new CustomEvent('bujji_notification', { detail: `Goal "${newGoalTitle}" has been logged.` }));
+  };
+
+  const selectActiveProject = (id: string) => {
+    PersonalOSBrain.setActiveProject(id);
+    refreshBujjiOS();
+    window.dispatchEvent(new CustomEvent('bujji_notification', { detail: `Switched project focus.` }));
+  };
+
+  useEffect(() => {
+    const updateActive = () => {
+      try {
+        const saved = localStorage.getItem('konda_preferred_providers');
+        if (saved) {
+          const config = JSON.parse(saved);
+          if (config && config.chat) {
+            setActiveProvider(config.chat === 'auto' ? 'Auto Router' : config.chat.toUpperCase());
+            return;
+          }
+        }
+      } catch (e) {}
+      setActiveProvider('Auto Router');
+    };
+    updateActive();
+    window.addEventListener('konda_providers_changed', updateActive);
+    return () => window.removeEventListener('konda_providers_changed', updateActive);
+  }, []);
 
   const triggerAssetDownload = (asset: { type: string; title: string; data: any }, format: string) => {
     const title = asset.title || "Konda Generated Asset";
@@ -67,6 +164,12 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
       console.error("No data payload found for asset download");
       return;
     }
+
+    triggerSystemNotification(
+      "Asset Export Initiated",
+      `Converting and downloading "${title}" in ${format.toUpperCase()} format.`,
+      "/favicon.ico"
+    ).catch(console.warn);
 
     try {
       if (format === "csv" && asset.type === "spreadsheet") {
@@ -568,7 +671,9 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
         id="command-center" 
         className={cn(
           "flex flex-col h-full bg-[#050505] relative transition-all duration-300",
-          isWorkspaceOpen ? "hidden lg:flex lg:w-[45%] shrink-0 border-r border-[#FF3E00]/10" : "w-full"
+          isWorkspaceOpen 
+            ? "hidden lg:flex lg:w-[45%] shrink-0 border-r border-[#FF3E00]/10" 
+            : (isBujjiPanelOpen ? "hidden lg:flex lg:w-[60%] shrink-0 border-r border-white/5" : "w-full")
         )}
       >
         <div className="flex-1 overflow-y-auto px-4 md:px-10 py-6 space-y-8 scroll-smooth custom-scrollbar" ref={scrollRef}>
@@ -747,38 +852,147 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
                           </div>
 
                           <div className="bg-[#050507]/80 rounded-lg border border-white/[0.03] overflow-hidden p-3.5 text-xs">
-                            {asset.type === 'spreadsheet' && asset.data && (
-                              <div className="flex flex-col gap-2.5">
-                                <div className="text-[10px] uppercase tracking-wider text-white/40 font-mono font-medium">Spreadsheet Data Grid</div>
-                                <div className="overflow-x-auto border border-white/5 rounded-md">
-                                  <table className="w-full text-left font-mono text-[10px] border-collapse">
-                                    <thead>
-                                      <tr className="bg-white/[0.02] border-b border-white/5">
-                                        {(asset.data.headers || []).slice(0, 5).map((col: string, cIdx: number) => (
-                                          <th key={cIdx} className="px-3 py-2 text-white/60 font-bold border-r border-white/5">{col}</th>
-                                        ))}
-                                        {asset.data.headers && asset.data.headers.length > 5 && (
-                                          <th className="px-3 py-2 text-white/30 italic">+{asset.data.headers.length - 5} cols</th>
+                            {asset.type === 'spreadsheet' && asset.data && (() => {
+                              const uniqueKey = `${msg.id}-${aIdx}`;
+                              const currentView = inlineAssetViews[uniqueKey] || 'table';
+                              const currentChartType = inlineChartTypes[uniqueKey] || 'bar';
+                              
+                              const chartData = (asset.data.rows || []).map((row: any[]) => {
+                                const item: any = { name: row[0] };
+                                (asset.data.headers || []).slice(1).forEach((header: string, idx: number) => {
+                                  const val = parseFloat(row[idx + 1]);
+                                  item[header] = isNaN(val) ? row[idx + 1] : val;
+                                });
+                                return item;
+                              });
+
+                              return (
+                                <div className="flex flex-col gap-2.5">
+                                  <div className="flex items-center justify-between gap-2 border-b border-white/[0.04] pb-2 text-[10px] font-mono select-none">
+                                    <div className="uppercase tracking-wider text-white/40 font-medium flex items-center gap-1.5">
+                                      <span>Spreadsheet Grid</span>
+                                      <span className="text-white/10">/</span>
+                                      <span className="text-[#FF3E00] font-bold">{currentView} mode</span>
+                                    </div>
+                                    <div className="flex items-center gap-1 bg-white/[0.02] p-0.5 rounded border border-white/5">
+                                      <button
+                                        onClick={() => setInlineAssetViews(prev => ({ ...prev, [uniqueKey]: 'table' }))}
+                                        className={cn(
+                                          "px-2 py-0.5 rounded-sm text-[8.5px] uppercase font-bold tracking-wider transition-all cursor-pointer",
+                                          currentView === 'table' ? "bg-white/10 text-white" : "text-white/45 hover:text-white/70"
                                         )}
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {(asset.data.rows || []).slice(0, 3).map((row: string[], rIdx: number) => (
-                                        <tr key={rIdx} className="border-b border-white/[0.02] hover:bg-white/[0.01]">
-                                          {row.slice(0, 5).map((cell, cIdx) => (
-                                            <td key={cIdx} className="px-3 py-2 text-white/85 border-r border-white/[0.02] truncate max-w-[120px]">{cell}</td>
-                                          ))}
-                                          {row.length > 5 && (
-                                            <td className="px-2 py-1 text-white/35 italic">...</td>
+                                      >
+                                        Table
+                                      </button>
+                                      <button
+                                        onClick={() => setInlineAssetViews(prev => ({ ...prev, [uniqueKey]: 'chart' }))}
+                                        className={cn(
+                                          "px-2 py-0.5 rounded-sm text-[8.5px] uppercase font-bold tracking-wider transition-all cursor-pointer",
+                                          currentView === 'chart' ? "bg-[#FF3E00]/10 text-[#FF3E00]" : "text-white/45 hover:text-white/70"
+                                        )}
+                                      >
+                                        Chart
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {currentView === 'table' ? (
+                                    <>
+                                      <div className="overflow-x-auto border border-white/5 rounded-md">
+                                        <table className="w-full text-left font-mono text-[9.5px] border-collapse">
+                                          <thead>
+                                            <tr className="bg-white/[0.02] border-b border-white/5">
+                                              {(asset.data.headers || []).slice(0, 5).map((col: string, cIdx: number) => (
+                                                <th key={cIdx} className="px-3 py-1.5 text-white/60 font-bold border-r border-white/5">{col}</th>
+                                              ))}
+                                              {asset.data.headers && asset.data.headers.length > 5 && (
+                                                <th className="px-3 py-1.5 text-white/30 italic">+{asset.data.headers.length - 5} cols</th>
+                                              )}
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {(asset.data.rows || []).slice(0, 5).map((row: string[], rIdx: number) => (
+                                              <tr key={rIdx} className="border-b border-white/[0.02] hover:bg-white/[0.01]">
+                                                {row.slice(0, 5).map((cell, cIdx) => (
+                                                  <td key={cIdx} className="px-3 py-1.5 text-white/85 border-r border-white/[0.02] truncate max-w-[120px]">{cell}</td>
+                                                ))}
+                                                {row.length > 5 && (
+                                                  <td className="px-2 py-1.5 text-white/35 italic">...</td>
+                                                )}
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                      <div className="text-[8.5px] font-mono text-white/30">Rendered first {Math.min(5, (asset.data.rows || []).length)} rows of {(asset.data.rows || []).length} items.</div>
+                                    </>
+                                  ) : (
+                                    <div className="flex flex-col gap-2 py-1">
+                                      <div className="flex items-center gap-1.5 text-[8.5px] font-mono">
+                                        <span className="text-white/30 lowercase">Type:</span>
+                                        {['bar', 'line', 'pie'].map((type) => (
+                                          <button
+                                            key={type}
+                                            onClick={() => setInlineChartTypes(prev => ({ ...prev, [uniqueKey]: type as any }))}
+                                            className={cn(
+                                              "px-1.5 py-0.5 rounded-sm uppercase tracking-wider transition-all cursor-pointer",
+                                              currentChartType === type ? "bg-[#FF3E00]/10 text-[#FF3E00] border border-[#FF3E00]/20" : "text-white/30 hover:text-white/60"
+                                            )}
+                                          >
+                                            {type}
+                                          </button>
+                                        ))}
+                                      </div>
+
+                                      <div className="w-full h-44 bg-black/40 rounded border border-white/[0.02] p-1 flex items-center justify-center">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                          {currentChartType === 'line' ? (
+                                            <LineChart data={chartData} margin={{ top: 10, right: 10, bottom: 5, left: -25 }}>
+                                              <XAxis dataKey="name" stroke="#444" fontSize={7} tickLine={false} />
+                                              <YAxis stroke="#444" fontSize={7} tickLine={false} />
+                                              <ChartTooltip contentStyle={{ background: '#050507', border: '1px solid #111', borderRadius: '4px', fontSize: '8px', fontFamily: 'monospace' }} />
+                                              <Legend wrapperStyle={{ fontSize: '7px', fontFamily: 'monospace' }} />
+                                              {(asset.data.headers || []).slice(1, 4).map((header: string, hIdx: number) => (
+                                                <Line key={header} type="monotone" dataKey={header} stroke={hIdx === 0 ? '#FF3E00' : hIdx === 1 ? '#3B82F6' : '#10B981'} strokeWidth={1} dot={{ r: 1.5 }} />
+                                              ))}
+                                            </LineChart>
+                                          ) : currentChartType === 'pie' ? (
+                                            <PieChart margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
+                                              <ChartTooltip contentStyle={{ background: '#050507', border: '1px solid #111', borderRadius: '4px', fontSize: '8px', fontFamily: 'monospace' }} />
+                                              <Legend wrapperStyle={{ fontSize: '7px', fontFamily: 'monospace' }} />
+                                              <Pie
+                                                data={chartData}
+                                                cx="50%"
+                                                cy="50%"
+                                                innerRadius={20}
+                                                outerRadius={45}
+                                                paddingAngle={2}
+                                                dataKey={(asset.data.headers || [])[1] || 'value'}
+                                                nameKey="name"
+                                              >
+                                                {chartData.map((_: any, index: number) => (
+                                                  <Cell key={`cell-${index}`} fill={['#FF3E00', '#3B82F6', '#10B981', '#8B5CF6', '#F59E0B'][index % 5]} />
+                                                ))}
+                                              </Pie>
+                                            </PieChart>
+                                          ) : (
+                                            <BarChart data={chartData} margin={{ top: 10, right: 10, bottom: 5, left: -25 }}>
+                                              <XAxis dataKey="name" stroke="#444" fontSize={7} tickLine={false} />
+                                              <YAxis stroke="#444" fontSize={7} tickLine={false} />
+                                              <ChartTooltip contentStyle={{ background: '#050507', border: '1px solid #111', borderRadius: '4px', fontSize: '8px', fontFamily: 'monospace' }} />
+                                              <Legend wrapperStyle={{ fontSize: '7px', fontFamily: 'monospace' }} />
+                                              {(asset.data.headers || []).slice(1, 4).map((header: string, hIdx: number) => (
+                                                <Bar key={header} dataKey={header} fill={hIdx === 0 ? '#FF3E00' : hIdx === 1 ? '#3B82F6' : '#10B981'} radius={[1, 1, 0, 0]} />
+                                              ))}
+                                            </BarChart>
                                           )}
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
+                                        </ResponsiveContainer>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
-                                <div className="text-[9px] font-mono text-white/30">Rendered first {Math.min(3, (asset.data.rows || []).length)} rows of {(asset.data.rows || []).length} lines.</div>
-                              </div>
-                            )}
+                              );
+                            })()}
 
                             {asset.type === 'diagram' && asset.data && (
                               <div className="flex flex-col gap-2">
@@ -1064,7 +1278,9 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
           </AnimatePresence>
 
           <form onSubmit={handleSubmit} className="relative group w-full flex items-center gap-4">
-            <div className="relative">
+            <div className="flex items-center gap-2">
+              <BrainSwitcher />
+              <div className="relative">
               <button
                 type="button"
                 onClick={() => setIsAttachmentMenuOpen(!isAttachmentMenuOpen)}
@@ -1112,6 +1328,7 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
                 )}
               </AnimatePresence>
             </div>
+          </div>
 
             <div className="flex-1 relative bg-white/[0.015] hover:bg-white/[0.03] border border-white/10 focus-within:border-[#FF3E00]/40 rounded-xl px-4 py-2.5 transition-all flex items-end gap-3 min-h-[44px]">
               <textarea
@@ -1322,6 +1539,20 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
               </button>
 
               <button 
+                onClick={() => setIsBujjiPanelOpen(!isBujjiPanelOpen)}
+                className={cn(
+                  "flex items-center gap-2 text-[10px] tracking-[0.2em] font-mono uppercase px-3 py-1 rounded-sm border transition-all",
+                  isBujjiPanelOpen 
+                    ? "bg-[#FF3E00]/20 border-[#FF3E00] text-[#FF3E00] font-bold" 
+                    : "text-white/40 border-white/5 hover:border-[#FF3E00]/40 hover:text-white"
+                )}
+                title="Toggle Personal OS Control Panel"
+              >
+                <FolderHeart className="w-4 h-4" />
+                <span>Bujji_OS</span>
+              </button>
+
+              <button 
                 onClick={() => onSendMessage("ENTROPY_SHIELD: I am experiencing system-wide cognitive stress. Activate God-Level Entropy Shielding and provide a strategic override immediately.")}
                 className="flex items-center gap-2 text-[10px] tracking-[0.2em] font-mono uppercase text-[#FF3E00]/40 hover:text-[#FF3E00] transition-all border border-[#FF3E00]/20 px-3 py-1 rounded-sm hover:bg-[#FF3E00]/10"
                 title="Activate Entropy Shield"
@@ -1344,12 +1575,274 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
               
               <div className="text-[10px] font-mono text-[#FF3E00]/60 tracking-widest uppercase flex items-center gap-1.5 justify-end">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#FF3E00] animate-pulse"></span>
-                Node: {selectedModel === 'auto' ? 'AUTO-ROUTED' : selectedModel.toUpperCase().replace('_', ' ')}
+                Node: {selectedModel === 'auto' ? 'AUTO-ROUTED' : selectedModel.toUpperCase().replace('_', ' ')} ({activeProvider})
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      <AnimatePresence>
+        {isBujjiPanelOpen && (
+          <motion.div
+            initial={{ opacity: 0, x: 80 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 80 }}
+            transition={{ type: "spring", damping: 25, stiffness: 180 }}
+            className="w-full lg:w-[40%] h-full border-l border-white/5 bg-[#070709] shrink-0 flex flex-col p-6 overflow-y-auto space-y-8 custom-scrollbar z-[45]"
+          >
+            {/* HUD Header */}
+            <div className="flex items-center justify-between border-b border-white/5 pb-4">
+              <div className="flex items-center gap-2.5">
+                <span className="p-1.5 bg-[#FF3E00]/10 border border-[#FF3E00]/30 rounded text-[#FF3E00] animate-pulse">
+                  <FolderHeart className="w-4 h-4" />
+                </span>
+                <div>
+                  <h3 className="text-xs uppercase tracking-[0.2em] text-[#FF3E00] font-bold">Bujji OS Core</h3>
+                  <span className="text-[8px] text-white/35 uppercase tracking-wider block">Cognitive Workspace HUD</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsBujjiPanelOpen(false)}
+                className="p-1 hover:bg-white/5 border border-white/5 hover:border-white/20 text-white/40 hover:text-white rounded-md transition-all cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Project Memory Block */}
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h4 className="text-[10px] uppercase tracking-widest text-white/50 font-bold flex items-center gap-1.5">
+                  <FolderHeart className="w-3.5 h-3.5 text-[#FF3E00]/80" />
+                  <span>Workspace Scoped Projects</span>
+                </h4>
+                <span className="text-[8px] px-1.5 py-0.5 border border-white/10 rounded text-white/30 uppercase">
+                  {bujjiProjects.length} Registered
+                </span>
+              </div>
+
+              {activeProject && (
+                <div className="p-4 border border-[#FF3E00]/30 bg-[#FF3E00]/5 rounded space-y-3 relative group overflow-hidden">
+                  <div className="absolute top-0 right-0 w-16 h-16 bg-[#FF3E00]/5 -mr-4 -mt-4 rounded-full blur-xl group-hover:scale-125 transition-transform" />
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="text-[8px] text-[#FF3E00] tracking-wider uppercase font-bold">Active Scope Focus</span>
+                      <h5 className="text-[11px] font-bold text-white tracking-widest uppercase mt-0.5">{activeProject.name}</h5>
+                    </div>
+                    <span className="text-[8px] bg-emerald-500/15 text-emerald-400 px-1.5 py-0.5 rounded uppercase tracking-widest font-bold">
+                      Online
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-white/55 leading-relaxed font-light">{activeProject.description}</p>
+                  
+                  {/* Scope Checklist Tasks */}
+                  {activeProject.tasks && activeProject.tasks.length > 0 ? (
+                    <div className="space-y-2 pt-1 border-t border-white/[0.03]">
+                      <span className="text-[8px] text-white/30 tracking-wider uppercase font-bold">Scope Checkpoints</span>
+                      <div className="space-y-1.5 max-h-40 overflow-y-auto custom-scrollbar">
+                        {activeProject.tasks.map((task: any) => (
+                          <div key={task.id} className="flex items-center gap-2 group/task">
+                            <button
+                              onClick={() => toggleProjectTask(task.id)}
+                              className={cn(
+                                "w-3.5 h-3.5 rounded border border-white/20 transition-all flex items-center justify-center shrink-0 hover:border-[#FF3E00] cursor-pointer",
+                                task.completed ? "bg-[#FF3E00] border-[#FF3E00] text-white" : "bg-black/40 text-transparent"
+                              )}
+                            >
+                              <Check className="w-2.5 h-2.5 stroke-[3]" />
+                            </button>
+                            <span className={cn(
+                              "text-[10.5px] leading-tight transition-all",
+                              task.completed ? "line-through text-white/30" : "text-white/80 group-hover/task:text-white"
+                            )}>
+                              {task.text}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-[9.5px] text-white/25 italic">No tasks logged in this project scope yet. Type /project to build checkpoints!</div>
+                  )}
+                </div>
+              )}
+
+              {/* Projects Quick Switcher */}
+              {bujjiProjects.length > 1 && (
+                <div className="space-y-1.5">
+                  <span className="text-[8px] text-white/30 tracking-wider uppercase">Vault Scopes Switcher</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {bujjiProjects.filter(p => p.id !== activeProject?.id).map(proj => (
+                      <button
+                        key={proj.id}
+                        onClick={() => selectActiveProject(proj.id)}
+                        className="p-2 border border-white/5 bg-black/30 hover:border-[#FF3E00]/30 hover:bg-white/5 text-left rounded transition-all group shrink-0 cursor-pointer text-white/60"
+                      >
+                        <span className="text-[10px] font-bold text-white/80 group-hover:text-[#FF3E00] uppercase truncate block">{proj.name}</span>
+                        <span className="text-[8px] text-white/30 line-clamp-1 block mt-0.5">{proj.tasks?.length || 0} Checkpoints</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Project creator */}
+              <div className="p-3 border border-white/5 bg-black/40 rounded space-y-3">
+                <span className="text-[9px] text-white/40 tracking-wider uppercase font-bold">Initialize Workspace Scope</span>
+                <div className="space-y-2">
+                  <input 
+                    type="text" 
+                    value={newProjectName}
+                    onChange={(e) => setNewProjectName(e.target.value)}
+                    placeholder="Project moniker (e.g. quantum-computing)"
+                    className="w-full bg-black/60 border border-white/5 rounded px-2 py-1.5 text-[10px] text-white focus:outline-none focus:border-[#FF3E00]/60 placeholder:text-white/20 font-mono"
+                  />
+                  <input 
+                    type="text" 
+                    value={newProjectDesc}
+                    onChange={(e) => setNewProjectDesc(e.target.value)}
+                    placeholder="Objective/brief description..."
+                    className="w-full bg-black/60 border border-white/5 rounded px-2 py-1.5 text-[10px] text-white focus:outline-none focus:border-[#FF3E00]/60 placeholder:text-white/20 font-mono"
+                  />
+                  <button
+                    onClick={createNewProject}
+                    className="w-full bg-[#FF3E00]/10 hover:bg-[#FF3E00] text-[#FF3E00] hover:text-white border border-[#FF3E00]/20 hover:border-[#FF3E00] transition-all py-1.5 rounded text-[9.5px] font-bold uppercase tracking-widest cursor-pointer"
+                  >
+                    Activate Scope Node
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Goals Progress Tracks */}
+            <div className="space-y-4">
+              <div className="flex justify-between items-center border-t border-white/5 pt-4">
+                <h4 className="text-[10px] uppercase tracking-widest text-white/50 font-bold flex items-center gap-1.5">
+                  <TrendingUp className="w-3.5 h-3.5 text-orange-400" />
+                  <span>Life Goals & Milestones</span>
+                </h4>
+                <span className="text-[8px] px-1.5 py-0.5 border border-white/10 rounded text-white/30 uppercase">
+                  {bujjiGoals.length} Registered
+                </span>
+              </div>
+
+              {bujjiGoals && bujjiGoals.length > 0 ? (
+                <div className="space-y-3">
+                  {bujjiGoals.map(goal => {
+                    const ratio = goal.progress;
+                    return (
+                      <div key={goal.id} className="p-3 border border-white/5 bg-black/20 rounded-sm space-y-2">
+                        <div className="flex justify-between text-[10px]">
+                          <span className="font-bold text-white uppercase tracking-wider">{goal.title}</span>
+                          <span className="text-orange-400 font-bold">{ratio}%</span>
+                        </div>
+                        {/* Progress bar line */}
+                        <div className="h-1.5 w-full bg-black border border-white/5 rounded-full overflow-hidden p-0.5 animate-pulse">
+                          <div 
+                            className="h-full bg-gradient-to-r from-[#FF3E00] to-orange-400 rounded-full transition-all duration-500" 
+                            style={{ width: `${ratio}%` }} 
+                          />
+                        </div>
+                        <div className="flex justify-between items-center text-[7.5px] text-white/30 uppercase">
+                          <span>Target: {goal.targetDate}</span>
+                          <span>{goal.status}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-[9.5px] text-white/20 italic">No milestones currently registered. Type /plan to organize a roadmap!</div>
+              )}
+
+              {/* Quick Goal Creator */}
+              <div className="flex gap-2">
+                <input 
+                  type="text" 
+                  value={newGoalTitle}
+                  onChange={(e) => setNewGoalTitle(e.target.value)}
+                  placeholder="Schedule a new milestone target..."
+                  className="flex-1 bg-black/60 border border-white/5 rounded px-2 py-1.5 text-[10px] text-white focus:outline-none focus:border-orange-400/60 placeholder:text-white/20 font-mono"
+                />
+                <button
+                  onClick={createNewGoal}
+                  className="px-3 bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/35 hover:border-orange-500 text-orange-400 transition-all text-xs font-bold rounded-md"
+                >
+                  ADD
+                </button>
+              </div>
+            </div>
+
+            {/* Life Chronological Timeline */}
+            <div className="space-y-4">
+              <div className="flex justify-between items-center border-t border-white/5 pt-4">
+                <h4 className="text-[10px] uppercase tracking-widest text-white/50 font-bold flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Personal Life Timeline</span>
+                </h4>
+              </div>
+
+              {bujjiTimeline && bujjiTimeline.length > 0 ? (
+                <div className="relative pl-3 border-l border-white/5 space-y-4 max-h-64 overflow-y-auto custom-scrollbar">
+                  {bujjiTimeline.map(ev => {
+                    const getEvIcon = () => {
+                      if (ev.type === 'milestone') return <Sparkles className="w-3 h-3 text-orange-400" />;
+                      if (ev.type === 'project_complete') return <CheckSquare className="w-3 h-3 text-emerald-400" />;
+                      return <ActivityIcon className="w-3 h-3 text-blue-400" />;
+                    };
+
+                    return (
+                      <div key={ev.id} className="relative group">
+                        {/* Node timeline dot */}
+                        <div className="absolute -left-5 top-1 w-2.5 h-2.5 rounded-full bg-[#050505] border border-white/10 flex items-center justify-center group-hover:border-[#FF3E00] transition-colors">
+                          <div className="w-1.5 h-1.5 rounded-full bg-white/10 group-hover:bg-[#FF3E00] transition-colors" />
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            {getEvIcon()}
+                            <span className="text-[10px] font-bold text-white group-hover:text-[#FF3E00] transition-colors uppercase tracking-wider">{ev.title}</span>
+                          </div>
+                          <span className="text-[8px] text-white/40 block uppercase tracking-widest">{ev.date} // {ev.type}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-[9.5px] text-white/20 italic">Timeline is empty. Log goals or execute slash commands to begin tracing history.</div>
+              )}
+            </div>
+
+            {/* Micro-Agent Active Collaboration Panel */}
+            <div className="p-4 border border-white/5 bg-[#030305] rounded space-y-3">
+              <span className="text-[8.5px] text-[#FF3E00] tracking-widest uppercase font-bold">Collaborative Specialists Stack</span>
+              <p className="text-[9.5px] text-white/40 leading-relaxed font-light">
+                Bujji operates a self-organizing micro-agent ecosystem in the background. The active node shifts depending on intent complexity:
+              </p>
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center text-[9.5px] text-white/60">
+                  <span className="flex items-center gap-1">📚 Academic Agent</span>
+                  <span className="text-emerald-400 font-bold">READY</span>
+                </div>
+                <div className="flex justify-between items-center text-[9.5px] text-white/60">
+                  <span className="flex items-center gap-1">💻 Coding Agent</span>
+                  <span className="text-emerald-400 font-bold">READY</span>
+                </div>
+                <div className="flex justify-between items-center text-[9.5px] text-white/60">
+                  <span className="flex items-center gap-1">📊 Data Agent</span>
+                  <span className="text-[#FF3E00] font-bold animate-pulse">MODELING</span>
+                </div>
+                <div className="flex justify-between items-center text-[9.5px] text-white/60">
+                  <span className="flex items-center gap-1">🧠 Planning Agent</span>
+                  <span className="text-emerald-400 font-bold">READY</span>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
 
       {isWorkspaceOpen && (
