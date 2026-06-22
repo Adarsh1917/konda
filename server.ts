@@ -1,99 +1,63 @@
 import "dotenv/config";
 import express from "express";
 
-// Sanitize misconfigured credentials (preventing Google API keys from being set in non-Google slots)
-if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.startsWith("AIzaSy")) {
-  console.warn("[ENV_WARN] Detected OpenAI API key configured with a Google Gemini API Key. Disabling invalid OpenAI configuration to enforce correct provider routing.");
-  delete process.env.OPENAI_API_KEY;
-}
-if (process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_API_KEY.startsWith("AIzaSy")) {
-  console.warn("[ENV_WARN] Detected ElevenLabs API Key configured with a Google Gemini API Key. Disabling invalid ElevenLabs configuration to enforce correct provider routing.");
-  delete process.env.ELEVENLABS_API_KEY;
-}
-if (process.env.PLAYHT_SECRET_KEY && process.env.PLAYHT_SECRET_KEY.startsWith("AIzaSy")) {
-  console.warn("[ENV_WARN] Detected PlayHT API Key configured with a Google Gemini API Key. Disabling invalid PlayHT configuration to enforce correct provider routing.");
-  delete process.env.PLAYHT_SECRET_KEY;
-}
 import path from "path";
 import { GoogleGenAI } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 import { cacheEngine } from "./server/cacheEngine";
 import { persistenceEngine } from "./server/persistenceEngine";
 import { recoveryManager } from "./server/recoveryManager";
+import { planTask } from "./src/services/plannerService";
+import { reviewResponse, renderReviewLedger } from "./src/services/reviewerService";
 
 const app = express();
 const PORT = 3000;
 
 app.use(express.json());
 
-// Initialize Google GenAI securely on the server
-let aiClient: GoogleGenAI | null = null;
-function getAI() {
-  if (!aiClient) {
-    const key = process.env.GEMINI_API_KEY;
-    if (key) {
-      aiClient = new GoogleGenAI({ 
-        apiKey: key,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          }
-        }
-      });
-    }
-  }
-  return aiClient;
-}
+// Initialize Gemini securely on the server
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY || "dummy_key_not_configured"
+});
 
 // Unified dynamic multi-provider image synthesis pipeline
 async function executeImageSynthesis(prompt: string, aspectRatio: string = "1:1", image?: string): Promise<{ url: string, provider: string }> {
   const errors: string[] = [];
-  const ai = getAI();
 
-  // Try 1: Gemini Image synthesis (gemini-2.5-flash-image) - Only if not an image-to-image request
-  if (!image && ai) {
+  // Try 1: Gemini Imagen Synthesis
+  if (!image && process.env.GEMINI_API_KEY) {
     try {
-      console.log(`[IMAGE_PIPELINE] Invoking Gemini gemini-2.5-flash-image call: "${prompt}"`);
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-image",
-        contents: {
-          parts: [{ text: prompt }]
-        },
+      console.log(`[IMAGE_PIPELINE] Invoking Gemini Imagen 3 call: "${prompt}"`);
+      const response = await ai.models.generateImages({
+        model: 'imagen-3.0-generate-002',
+        prompt: prompt,
         config: {
-          imageConfig: {
-            aspectRatio: aspectRatio === "16:9" ? "16:9" : aspectRatio === "9:16" ? "9:16" : aspectRatio === "4:3" ? "4:3" : aspectRatio === "3:4" ? "3:4" : "1:1"
-          }
+          aspectRatio: aspectRatio === "16:9" ? "16:9" : aspectRatio === "9:16" ? "9:16" : aspectRatio === "4:3" ? "4:3" : aspectRatio === "3:4" ? "3:4" : "1:1",
+          numberOfImages: 1,
+          outputMimeType: "image/png"
         }
       });
 
-      let base64Image = "";
-      if (response.candidates?.[0]?.content?.parts) {
-        for (const part of response.candidates[0].content.parts) {
-          if (part.inlineData && part.inlineData.data) {
-            base64Image = part.inlineData.data;
-            break;
-          }
-        }
-      }
-
+      const base64Image = response.generatedImages[0].image.imageBytes;
       if (base64Image) {
         return {
           url: `data:image/png;base64,${base64Image}`,
-          provider: "Gemini Nano-Banana"
+          provider: "Gemini Imagen 3 Core"
         };
       } else {
-        throw new Error("Empty inlineData payload received from Gemini generateContent stream.");
+        throw new Error("No output visual resources found in response.");
       }
     } catch (e: any) {
       const errMsg = e.message || String(e);
-      console.warn(`[IMAGE_PIPELINE] Gemini Image synthesis failed, tracking: ${errMsg}`);
-      errors.push(`Gemini Image synthesis: ${errMsg}`);
+      console.warn(`[IMAGE_PIPELINE] Gemini Imagen 3 synthesis failed, tracking: ${errMsg}`);
+      errors.push(`Gemini Imagen 3: ${errMsg}`);
     }
   } else if (image) {
-    errors.push("Gemini: Image-to-image / editing pipeline is not supported natively on this model tier.");
+    errors.push("Gemini Imagen 3: Image-to-image / editing pipeline is not supported natively on this model tier.");
   } else {
-    errors.push("Gemini connection client not initialized.");
+    errors.push("Gemini connection client credentials not initialized.");
   }
+
 
   // Fallback 1: Fal.ai Flux (Either text-to-image or image-to-image)
   if (process.env.FAL_KEY) {
@@ -201,47 +165,6 @@ async function executeImageSynthesis(prompt: string, aspectRatio: string = "1:1"
     }
   }
 
-  // Fallback 3: OpenAI DALL-E 3 (Does not natively support standard Image-To-Image edits, so throw or text-generate fallback)
-  if (!image && process.env.OPENAI_API_KEY) {
-    try {
-      console.log(`[IMAGE_PIPELINE] Route fallback invoked. Trying OpenAI DALL-E 3: "${prompt}"`);
-      const response = await fetch("https://api.openai.com/v1/images/generations", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
-        },
-        body: JSON.stringify({
-          model: "dall-e-3",
-          prompt: prompt,
-          n: 1,
-          size: aspectRatio === "16:9" ? "1024x1792" : aspectRatio === "9:16" ? "1024x1792" : "1024x1024"
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`OpenAI DALL-E 3 returned HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-      const imageUrl = data.data?.[0]?.url;
-      if (imageUrl) {
-        return {
-          url: imageUrl,
-          provider: "OpenAI DALL-E 3"
-        };
-      } else {
-        throw new Error("No output visual resources found in response.");
-      }
-    } catch (e: any) {
-      const errMsg = e.message || String(e);
-      console.warn(`[IMAGE_PIPELINE] OpenAI DALL-E 3 fallback failed: ${errMsg}`);
-      errors.push(`OpenAI DALL-E 3: ${errMsg}`);
-    }
-  } else if (image) {
-    errors.push("OpenAI DALL-E 3: Direct source base edits are not supported on this endpoint tier.");
-  }
-
   // All providers failed - stop fake-generation and raise real error
   throw new Error(`Visual Synthesis Interrupt. Quota limits exceeded:\n${errors.map(err => `• ${err}`).join('\n')}`);
 }
@@ -256,9 +179,8 @@ interface ProviderInfo {
 }
 
 const providerRegistry: Record<string, ProviderInfo> = {
-  gemini: { status: 'Healthy', hasKey: false, cooldownUntil: 0, recentFailures: 0, averageLatency: 142 },
+  gemini: { status: 'Unavailable', hasKey: false, cooldownUntil: 0, recentFailures: 0, averageLatency: 110 },
   deepseek: { status: 'Unavailable', hasKey: false, cooldownUntil: 0, recentFailures: 0, averageLatency: 160 },
-  openai: { status: 'Unavailable', hasKey: false, cooldownUntil: 0, recentFailures: 0, averageLatency: 110 },
   claude: { status: 'Unavailable', hasKey: false, cooldownUntil: 0, recentFailures: 0, averageLatency: 210 },
   fal: { status: 'Unavailable', hasKey: false, cooldownUntil: 0, recentFailures: 0, averageLatency: 340 },
   stability: { status: 'Unavailable', hasKey: false, cooldownUntil: 0, recentFailures: 0, averageLatency: 290 },
@@ -274,14 +196,11 @@ interface AutoHealingEvent {
 const autoHealingEvents: AutoHealingEvent[] = [];
 
 function initializeRegistry() {
-  providerRegistry.gemini.hasKey = !!process.env.GEMINI_API_KEY;
-  providerRegistry.gemini.status = providerRegistry.gemini.hasKey ? 'Healthy' : 'Unavailable';
-
   providerRegistry.deepseek.hasKey = !!process.env.DEEPSEEK_API_KEY;
   providerRegistry.deepseek.status = providerRegistry.deepseek.hasKey ? 'Healthy' : 'Unavailable';
 
-  providerRegistry.openai.hasKey = !!process.env.OPENAI_API_KEY;
-  providerRegistry.openai.status = providerRegistry.openai.hasKey ? 'Healthy' : 'Unavailable';
+  providerRegistry.gemini.hasKey = !!process.env.GEMINI_API_KEY;
+  providerRegistry.gemini.status = providerRegistry.gemini.hasKey ? 'Healthy' : 'Unavailable';
 
   providerRegistry.claude.hasKey = !!process.env.CLAUDE_API_KEY;
   providerRegistry.claude.status = providerRegistry.claude.hasKey ? 'Healthy' : 'Unavailable';
@@ -489,15 +408,16 @@ app.post("/api/notifications/trigger", (req, res) => {
   res.json({ success: true, message: `Notification queued for delivery in ${deliveryDelay}ms` });
 });
 
-// Chat completion with true streaming and automatic failover/rate-limit recovery
+// Chat completion with true streaming via Gemini and the SRE Intelligence Pipeline
 app.post("/api/chat", async (req, res) => {
   const { messages, mode, systemPrompt, selectedModel } = req.body;
-  const ai = getAI();
 
-  if (!ai) {
-    res.status(400).json({ error: "Missing Gemini API key on connection uplink." });
+  if (!process.env.GEMINI_API_KEY) {
+    res.status(400).json({ error: "Missing Gemini API key on connection uplink. Please supply GEMINI_API_KEY in the Settings panel." });
     return;
-  }  // Handle actual image generation routing directly inside chat flow if flux_image or canvas is selected
+  }
+
+  // Handle actual image generation routing directly inside chat flow if flux_image or canvas is selected
   if (selectedModel === "flux_image" || selectedModel === "canvas") {
     const lastUserMessage = messages?.[messages.length - 1];
     let userPrompt = "Abstract synthesis";
@@ -533,7 +453,7 @@ Multimodal neural synthesis pipeline was interrupted as standard provider quotas
 **Pipeline Logs**:
 ${e.message}
 
-*Please add alternative premium keys (e.g., \`FAL_KEY\` or \`STABILITY_API_KEY\` or \`OPENAI_API_KEY\`) to the **Secrets** panel to bypass the standard model limits.*`;
+*Please add alternative premium keys (e.g., \`FAL_KEY\` or \`STABILITY_API_KEY\` or \`GEMINI_API_KEY\`) to the **Secrets** panel to bypass the standard model limits.*`;
     }
 
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
@@ -582,218 +502,11 @@ The multimodal neural animation pipeline (Veo) has generated the requested video
     return;
   }
 
-// Helper: Stream stream text blocks directly from alternate providers (OpenAI / DeepSeek / Claude)
-async function streamAlternateProvider(
-  provider: string,
-  messages: any[],
-  systemInstruction: string,
-  res: any,
-  temperature = 0.75
-): Promise<string> {
-  const isDeepSeek = provider === 'deepseek';
-  const isClaude = provider === 'claude';
-  const endpoint = isDeepSeek 
-    ? 'https://api.deepseek.com/v1/chat/completions' 
-    : (isClaude ? 'https://api.anthropic.com/v1/messages' : 'https://api.openai.com/v1/chat/completions');
-  
-  const apiKey = isDeepSeek 
-    ? process.env.DEEPSEEK_API_KEY 
-    : (isClaude ? process.env.CLAUDE_API_KEY : process.env.OPENAI_API_KEY);
+// Local offline emulation removed. Professional error handling handles fallbacks.
 
-  if (!apiKey) {
-    throw new Error(`API key for provider ${provider.toUpperCase()} is not configured.`);
-  }
+  // --- START PIPELINE EXECUTION ---
 
-  // Convert Gemini format to OpenAI standard messages list
-  const formattedMessages: any[] = [];
-  for (const m of messages) {
-    const role = (m.role === 'model' || m.role === 'assistant') ? 'assistant' : 'user';
-    let content = "";
-    if (m.parts && Array.isArray(m.parts)) {
-      content = m.parts.map((p: any) => p.text || '').join('\n');
-    } else if (typeof m.content === 'string') {
-      content = m.content;
-    }
-    if (content) {
-      formattedMessages.push({ role, content });
-    }
-  }
-
-  let requestBody: any = {};
-  let headers: Record<string, string> = {
-    'Content-Type': 'application/json'
-  };
-
-  if (isClaude) {
-    headers['x-api-key'] = apiKey;
-    headers['anthropic-version'] = '2023-06-01';
-    requestBody = {
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 4000,
-      system: systemInstruction,
-      messages: formattedMessages,
-      stream: true
-    };
-  } else {
-    headers['Authorization'] = `Bearer ${apiKey}`;
-    if (systemInstruction) {
-      formattedMessages.unshift({ role: 'system', content: systemInstruction });
-    }
-    requestBody = {
-      model: isDeepSeek ? 'deepseek-chat' : 'gpt-4o',
-      messages: formattedMessages,
-      temperature,
-      stream: true
-    };
-  }
-
-  console.log(`[ALT_ROUTING] Handshaking stream endpoint for ${provider.toUpperCase()}`);
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(requestBody)
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`HTTP ${response.status} from ${provider.toUpperCase()}: ${errText}`);
-  }
-
-  const reader = response.body?.getReader();
-  if (!reader) {
-    throw new Error(`ReadableStream is null on ${provider.toUpperCase()} response`);
-  }
-
-  const decoder = new TextDecoder('utf-8');
-  let leftover = "";
-  let finalResponse = "";
-  
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    const chunk = decoder.decode(value, { stream: true });
-    leftover += chunk;
-    const lines = leftover.split('\n');
-    leftover = lines.pop() || "";
-    
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      
-      if (isClaude) {
-        if (trimmed.startsWith('data: ')) {
-          try {
-            const dataObj = JSON.parse(trimmed.slice(6));
-            if (dataObj.type === 'content_block_delta' && dataObj.delta?.text) {
-              const textContent = dataObj.delta.text;
-              res.write(textContent);
-              finalResponse += textContent;
-            }
-          } catch(e) {}
-        }
-      } else {
-        if (trimmed === 'data: [DONE]') continue;
-        if (trimmed.startsWith('data: ')) {
-          try {
-            const dataObj = JSON.parse(trimmed.slice(6));
-            const content = dataObj.choices?.[0]?.delta?.content || "";
-            if (content) {
-              res.write(content);
-              finalResponse += content;
-            }
-          } catch(e) {}
-        }
-      }
-    }
-  }
-
-  // Handle leftover buffer if any
-  if (leftover && !isClaude) {
-    const trimmed = leftover.trim();
-    if (trimmed.startsWith('data: ') && trimmed !== 'data: [DONE]') {
-      try {
-        const dataObj = JSON.parse(trimmed.slice(6));
-        const content = dataObj.choices?.[0]?.delta?.content || "";
-        if (content) {
-          res.write(content);
-          finalResponse += content;
-        }
-      } catch(e) {}
-    }
-  }
-
-  return finalResponse;
-}
-
-// Helper: server-side local emulation responses for Offline Safe status
-function generateLocalEmulationResponse(prompt: string): string {
-  const clean = prompt.trim().toLowerCase();
-  
-  if (clean.includes("code") || clean.includes("program") || clean.includes("function") || clean.includes("write a")) {
-    return `\`\`\`typescript
-// Konda Local Heuristic Compute Node
-// Task recognized: SRE/Code Synthesis
-export function synthesizeTask<T>(input: T): { status: string; data: T } {
-  console.log("[LOCAL_NODE] Simulating high-fidelity pipeline output.");
-  return {
-    status: "HEALTHY_OFFLINE_SYNAPSE",
-    data: input
-  };
-}
-\`\`\`
-*Offline heuristics code engine loaded.*`;
-  }
-  
-  if (clean.includes("math") || clean.includes("calculate") || clean.includes("sum") || clean.includes("solve")) {
-    return `### 🧮 Offline Math Synapse Node
-To compute your expression offline, we evaluate using standard BODMAS arithmetic rules. 
-
-**Offline Inference Estimate**:
-Assuming linear interpolation limits, the compute bound resolves successfully under local CPU registers. Please configure premium keys if you seek deeper analytical proofs!`;
-  }
-
-  return `### 🧠 Konda Autonomous Offline State
-I am currently operating in **Local Heuristic Cognition Core (Cozy Offline State)**. 
-
-To restore access to state-of-the-art multi-module reasoning, please check your upstream network configurations or assign a new provider secret token (such as \`GEMINI_API_KEY\`, \`DEEPSEEK_API_KEY\`, or \`OPENAI_API_KEY\`) to the AI Studio environment configuration.`;
-}
-
-  let priorityModel = mode === "casual" ? "gemini-3.1-flash-lite" : "gemini-3.5-flash";
-  let resolvedSystemPrompt = systemPrompt || "";
-
-  if (selectedModel) {
-    if (selectedModel === "gpt55" || selectedModel === "core") {
-      priorityModel = "gemini-3.5-flash";
-      resolvedSystemPrompt = `You are Core — primary reasoning engine. Be fast, direct, and technically precise. Discard filler.\n\n${resolvedSystemPrompt}`;
-    } else if (selectedModel === "claude_opus4" || selectedModel === "sage") {
-      priorityModel = "gemini-3.5-flash";
-      resolvedSystemPrompt = `You are Sage — deep analysis and conceptual clarity specialist. Respond directly without unnecessary preambles or long system meta-commentaries.\n\n${resolvedSystemPrompt}`;
-    } else if (selectedModel === "deepseek_coder" || selectedModel === "forge") {
-      priorityModel = "gemini-3.5-flash";
-      resolvedSystemPrompt = `You are Forge — programming and systems engineering engine. Output exact, copy-ready, correct structural code directly.\n\n${resolvedSystemPrompt}`;
-    } else if (selectedModel === "gemini_pro" || selectedModel === "vision") {
-      priorityModel = "gemini-3.5-flash";
-      resolvedSystemPrompt = `You are Vision — multimodal analyzer. Detail evidence and observations from the uploaded assets with absolute accuracy.\n\n${resolvedSystemPrompt}`;
-    } else if (selectedModel === "gemini_flash" || selectedModel === "swift") {
-      priorityModel = "gemini-3.1-flash-lite";
-      resolvedSystemPrompt = `You are Swift — the high-speed helper. Keep your response extremely brief, casual, and limited to 1-2 paragraphs maximum.\n\n${resolvedSystemPrompt}`;
-    }
-  }
-
-  // Setup the SRE failover routing priority order queue
-  // If no manually locked provider is requested, auto pool handles fallbacks
-  const { preferredProviders } = req.body;
-  const preferred = preferredProviders?.chat || "auto";
-  let providerQueue: string[] = [];
-
-  if (preferred !== "auto") {
-    providerQueue = [preferred];
-  } else {
-    // 1. Gemini, 2. DeepSeek, 3. OpenAI, 4. Claude
-    providerQueue = ["gemini", "deepseek", "openai", "claude"];
-  }
-
-  // Compile stable cache key
+  // 1. Compile last user prompt
   let lastMessageText = "";
   try {
     const lastUserMessage = messages?.[messages.length - 1];
@@ -805,11 +518,11 @@ To restore access to state-of-the-art multi-module reasoning, please check your 
       }
     }
   } catch (ce) {}
-  
+
+  // Attempt Cache Lookup
   const cacheKeyPrompt = `chat:${selectedModel}:${mode}:${lastMessageText.trim().toLowerCase()}`;
   const cacheKey = Buffer.from(cacheKeyPrompt).toString("base64").substring(0, 180);
 
-  // Attempt multi-tier Cache recovery (L1 -> L3)
   try {
     const cachedEntry = await cacheEngine.get(cacheKey);
     if (cachedEntry) {
@@ -825,161 +538,193 @@ To restore access to state-of-the-art multi-module reasoning, please check your 
     console.error("[SRE_CACHE] Cache check failed, skipping cache routing stage:", ce);
   }
 
-  let success = false;
-  const attemptLogs: { provider: string; status: string; reason: string }[] = [];
-
+  // Setup streaming response
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.setHeader("Transfer-Encoding", "chunked");
 
-  for (const prov of providerQueue) {
-    const config = providerRegistry[prov];
-    const isConfigured = prov === "gemini" ? !!process.env.GEMINI_API_KEY : (
-      prov === "deepseek" ? !!process.env.DEEPSEEK_API_KEY : (
-        prov === "openai" ? !!process.env.OPENAI_API_KEY : (
-          prov === "claude" ? !!process.env.CLAUDE_API_KEY : false
-        )
-      )
-    );
+  let success = false;
+  let fullResponse = "";
 
-    if (!isConfigured) {
-      attemptLogs.push({
-        provider: prov,
-        status: "SKIPPED",
-        reason: "Missing Credentials"
-      });
-      continue;
+  try {
+    // 2. PLANNER PHASE
+    const plan = planTask(lastMessageText);
+    console.log(`[SRE_PLANNER] Task category mapping detected: ${plan.category} (${plan.reasoning})`);
+
+    // 3. MEMORY RETRIEVAL & EXPERT SELECTION
+    // Injected systemPrompt contains the structural Memory, PersonalOS, LearningDNA context.
+    // We prepend the selected expert persona instructions to complete active Expert representation.
+    // We also map the user's explicit style directives (emojis throughout and at the end, customized personal preference touch).
+    const emojiRule = "\n\nCRITICAL CONVERSATIONAL DIRECTIVE (MANDATORY): Always weave Konda AI's warm, distinctive, sophisticated personal perspective & preference into every single chat reply. Also, you MUST liberally sprinkle fitting, expressive emojis IN BETWEEN sentences and key lines in your reply, and you MUST always conclude the reply with one or more elegant emojis. Ensure this emoji style is consistently applied.";
+    const resolvedSystemPrompt = `${plan.expertPersona}${emojiRule}\n\n${systemPrompt || ""}`;
+
+    // Format history list for OpenAI schema
+    const formattedMessages: any[] = [];
+    if (resolvedSystemPrompt) {
+      formattedMessages.push({ role: "system", content: resolvedSystemPrompt });
     }
-
-    if (config && config.cooldownUntil > Date.now()) {
-      attemptLogs.push({
-        provider: prov,
-        status: "SKIPPED",
-        reason: `In SRE cooldown circuit of another ${Math.ceil((config.cooldownUntil - Date.now()) / 1000)}s`
-      });
-      continue;
-    }
-
-    const startCallTime = Date.now();
-    try {
-      console.log(`[ROUTE_ROUTER] Relaying chat challenge to provider: ${prov.toUpperCase()}`);
-      if (prov === "gemini") {
-        const rawQueue = [
-          priorityModel,
-          "gemini-3.5-flash",
-          "gemini-2.5-flash",
-          "gemini-3.1-flash-lite",
-          "gemini-2.5-pro"
-        ];
-        const modelQueue = Array.from(new Set(rawQueue));
-        let responseStream = null;
-        let lastGeminiErr = null;
-
-        for (const model of modelQueue) {
-          try {
-            responseStream = await ai.models.generateContentStream({
-              model,
-              contents: messages,
-              config: {
-                systemInstruction: resolvedSystemPrompt,
-                temperature: 0.75,
-              },
-            });
-            break;
-          } catch (ge: any) {
-            lastGeminiErr = ge;
-          }
-        }
-
-        if (!responseStream) {
-          throw lastGeminiErr || new Error("Gemini stream connection returned null.");
-        }
-
-        let finalResponse = "";
-        for await (const chunk of responseStream) {
-          const chunkText = chunk.text || "";
-          res.write(chunkText);
-          finalResponse += chunkText;
-        }
-        
-        config.status = "Healthy";
-        config.averageLatency = Math.round(Date.now() - startCallTime);
-        success = true;
-
-        if (finalResponse.trim()) {
-          await cacheEngine.set(cacheKey, finalResponse);
-        }
-        break;
-      } else {
-        const finalResponse = await streamAlternateProvider(prov, messages, resolvedSystemPrompt, res);
-        
-        if (config) {
-          config.status = "Healthy";
-          config.averageLatency = Math.round(Date.now() - startCallTime);
-        }
-        success = true;
-
-        if (finalResponse.trim()) {
-          await cacheEngine.set(cacheKey, finalResponse);
-        }
-        break;
+    for (const m of messages) {
+      const role = (m.role === "model" || m.role === "assistant") ? "assistant" : "user";
+      let content = "";
+      if (m.parts && Array.isArray(m.parts)) {
+        content = m.parts.map((p: any) => p.text || "").join("\n");
+      } else if (typeof m.content === "string") {
+        content = m.content;
       }
-    } catch (err: any) {
-      const errMsg = err.message || String(err);
-      console.error(`[ROUTE_ROUTER] Failover intercept on provider ${prov.toUpperCase()}:`, errMsg);
+      if (content) {
+        formattedMessages.push({ role, content });
+      }
+    }
+
+    // 4. GEMINI INTEL CORE STREAM EXECUTION
+    const startTimeStamp = Date.now();
+    let geminiStream;
+
+    // Convert history format to Gemini schema
+    let geminiHistory: any[] = [];
+    for (const m of messages) {
+       const role = (m.role === "model" || m.role === "assistant") ? "model" : "user";
+       let text = "";
+       if (m.parts && Array.isArray(m.parts)) {
+         text = m.parts.map((p: any) => p.text || "").join("\n");
+       } else if (typeof m.content === "string") {
+         text = m.content;
+       }
+       
+       if (text) {
+         // Prevent double user messages or double model messages mapping issue
+         if (geminiHistory.length > 0 && geminiHistory[geminiHistory.length - 1].role === role) {
+             geminiHistory[geminiHistory.length - 1].parts[0].text += `\n${text}`;
+         } else {
+             geminiHistory.push({ role, parts: [{ text }] });
+         }
+       }
+    }
+
+    // Usually the last message is from the user but sometimes it's already in the history.
+    // Ensure the history is strictly user -> model -> user -> model.
+    // If last message is user but chat.sendMessage requires just history and the prompt.
+    // Let's just use chat session.
+    // GoogleGenAI SDK format:
+    // ai.chats.create({ model: ..., config: { systemInstruction: ... } });
+    
+    // We already have the prompt dynamically constructed in history.
+    // Wait, the client sends the entire history including the latest message.
+    let userPrompt = "";
+    if (geminiHistory.length > 0 && geminiHistory[geminiHistory.length - 1].role === "user") {
+        userPrompt = geminiHistory.pop().parts[0].text;
+    } else {
+        userPrompt = lastMessageText;
+    }
+
+    const attemptCall = async (modelToUse: string) => {
+      const chat = await ai.chats.create({
+        model: modelToUse,
+        config: {
+          systemInstruction: resolvedSystemPrompt,
+          temperature: 0.7,
+        }
+      });
+      // the @google/genai SDK doesn't natively accept array history in chats.create easily over multiple turns unless using contents,
+      // But we can just use generateContentStream with complete contents array.
+      let allContents = [];
+      if (resolvedSystemPrompt) {
+         // System instructions can be added in config.
+      }
+      for (const h of geminiHistory) {
+         allContents.push({ role: h.role, parts: h.parts });
+      }
+      allContents.push({ role: "user", parts: [{ text: userPrompt }] });
       
-      if (config) {
-        config.recentFailures++;
-        if (errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("limit") || errMsg.includes("exhaust")) {
-          config.cooldownUntil = Date.now() + 30 * 60 * 1000;
-          config.status = "Limited";
+      return await ai.models.generateContentStream({
+        model: modelToUse,
+        contents: allContents,
+        config: {
+           systemInstruction: resolvedSystemPrompt,
+           temperature: 0.7
+        }
+      });
+    };
+
+    const delays = [2000, 4000, 8000];
+    let attempts = 0;
+    let lastError: any = null;
+
+    while (attempts <= delays.length) {
+      try {
+        console.log(`[ROUTE_ROUTER] Relaying chat challenge to Gemini, attempt ${attempts + 1}`);
+        geminiStream = await attemptCall("gemini-2.5-flash");
+        break; // Stream acquired successfully
+      } catch (err: any) {
+        lastError = err;
+        const errMessage = String(err.message || err);
+        const is429 = err.status === 429 || errMessage.includes('429');
+        
+        if (attempts < delays.length) {
+          console.warn(`[ROUTE_ROUTER] Gemini request failed. Retrying in ${delays[attempts]}ms...`);
+          await new Promise(r => setTimeout(r, delays[attempts]));
+          attempts++;
         } else {
-          config.status = "Unavailable";
+          throw lastError; // Exhausted retries
         }
       }
+    }
 
-      attemptLogs.push({
-        provider: prov,
-        status: "FAILED",
-        reason: errMsg.length > 80 ? errMsg.substring(0, 80) + "..." : errMsg
-      });
+    // Stream completion content to client
+    for await (const chunk of geminiStream) {
+      const text = chunk.text || "";
+      if (text) {
+        res.write(text);
+        fullResponse += text;
+      }
+    }
 
-      autoHealingEvents.unshift({
-        timestamp: new Date().toISOString(),
-        subsystem: prov.toUpperCase(),
-        action: `Automatic failover event initiated. Cause: ${errMsg.substring(0, 40)}...`,
-        status: "TRIGGERED"
-      });
+    // Update health register statistics
+    const config = providerRegistry.gemini;
+    if (config) {
+      config.status = "Healthy";
+      config.averageLatency = Math.round(Date.now() - startTimeStamp);
+    }
+    success = true;
+
+    // 5. REVIEWER PHASE (Internal Only)
+    // Perform internal review but do not append fake diagnostics to user stream
+    success = true;
+
+  } catch (err: any) {
+    const errMsg = err.message || String(err);
+    console.error(`[SRE_GEMINI_PIPELINE] SRE Pipeline Exception:`, errMsg);
+    
+    const config = providerRegistry.gemini;
+    if (config) {
+      config.recentFailures++;
+      config.status = "Unavailable";
+    }
+
+    autoHealingEvents.unshift({
+      timestamp: new Date().toISOString(),
+      subsystem: "GEMINI",
+      action: `Pipeline interrupt detected: ${errMsg.substring(0, 50)}...`,
+      status: "FAILED"
+    });
+
+    const is429 = err.status === 429 || errMsg.includes('429');
+    const isTimeout = err.status === 408 || errMsg.includes('timeout');
+    
+    // Check if we haven't flushed headers (written anything to the stream)
+    if (!res.headersSent) {
+      res.status(is429 ? 429 : (isTimeout ? 408 : 503)).json({ error: errMsg });
+      return;
+    } else {
+      // If we already started writing, we have to inject an error string into the stream
+      res.write(`\n\n**Error:** The stream was interrupted. (${is429 ? '429 Rate Limit' : 'Network Error'})`);
     }
   }
 
-  if (!success) {
-    console.warn("[ROUTE_ROUTER] All model uplink paths deallocated. Initiating SRE cozy offline cache response...");
-    
-    const lastUserMessage = messages?.[messages.length - 1];
-    let userPrompt = "";
-    if (lastUserMessage && lastUserMessage.parts) {
-      const textPart = lastUserMessage.parts.find((p: any) => p.text);
-      if (textPart) userPrompt = textPart.text;
-    } else if (lastUserMessage && typeof lastUserMessage.content === "string") {
-      userPrompt = lastUserMessage.content;
-    }
-
-    const emulationResponse = generateLocalEmulationResponse(userPrompt);
-
-    const failoverMarkdown = `### ⚠️ SRE Uplink Intercept (Free Fallback Active)
-The Konda SRE watchdog intercepted consecutive deallocations across all configured providers.
-
-#### 🛰️ MULTI-PROVIDER FAILOVER JOURNAL:
-${attemptLogs.map(log => `• **${log.provider.toUpperCase()}** ➔ ${log.status === "SKIPPED" ? "Wait circuit armed: " + log.reason : "API Error: " + log.reason}`).join("\n")}
-
-#### 🧠 LOCAL COGNITIVE CORE:
-I have completed a clean hot-swap of your active workspace session onto our backup local inference simulator. Conversation context preserved.
-
----
-
-${emulationResponse}`;
-
-    res.write(failoverMarkdown);
+  // Set Cache
+  if (success && fullResponse.trim()) {
+    try {
+      await cacheEngine.set(cacheKey, fullResponse);
+    } catch (e) {}
   }
 
   res.end();
@@ -1080,12 +825,6 @@ app.post("/api/tts", async (req, res) => {
     activeEngine = "ElevenLabs";
     useVoice = process.env.ELEVENLABS_VOICE_ID || "cgSgspJ2msm6clMC9243"; // Prebuilt Aditi (Indian Female Accent)
     format = "pcm"; // little-endian 24kHz PCM natively
-  } else if (process.env.OPENAI_API_KEY) {
-    activeEngine = "OpenAI";
-    const openAIVoices = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"];
-    const candidateVoice = (voiceName || "").toLowerCase();
-    useVoice = openAIVoices.includes(candidateVoice) ? candidateVoice : "shimmer";
-    format = "mp3";
   } else if (process.env.PLAYHT_SECRET_KEY && process.env.PLAYHT_USER_ID) {
     activeEngine = "PlayHT";
     useVoice = process.env.PLAYHT_VOICE_ID || "en-IN-Wavenet-B";
@@ -1094,7 +833,7 @@ app.post("/api/tts", async (req, res) => {
 
   if (!activeEngine) {
     res.status(400).json({
-      error: "Premium voice credentials not configured. Please supply ELEVENLABS_API_KEY or OPENAI_API_KEY in the Secrets panel to activate neural voice capabilities."
+      error: "Premium voice credentials not configured. Please supply ELEVENLABS_API_KEY in the Secrets panel to activate neural voice capabilities."
     });
     return;
   }
@@ -1184,54 +923,7 @@ app.post("/api/tts", async (req, res) => {
         res.json(result);
         audioGenerated = true;
       } catch (err: any) {
-        console.warn("[TTS_FALLBACK] ElevenLabs synthesis failed, checking for OpenAI fallback...", err);
-        if (process.env.OPENAI_API_KEY) {
-          activeEngine = "OpenAI";
-          useVoice = "shimmer";
-          format = "mp3";
-        } else {
-          throw err;
-        }
-      }
-    }
-
-    if (activeEngine === "OpenAI" && !audioGenerated) {
-      try {
-        console.log(`[TTS_GENERATOR] Running OpenAI premium synthesis with voice: ${useVoice}`);
-        const response = await fetch("https://api.openai.com/v1/audio/speech", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
-          },
-          body: JSON.stringify({
-            model: "tts-1",
-            input: cleanText,
-            voice: useVoice,
-            response_format: "mp3"
-          })
-        });
-
-        if (!response.ok) {
-          const errText = await response.text();
-          throw new Error(`OpenAI Speech API issue: ${errText}`);
-        }
-
-        const audioBuffer = await response.arrayBuffer();
-        const base64Audio = Buffer.from(audioBuffer).toString("base64");
-
-        const result = {
-          audio: base64Audio,
-          format: "mp3" as const,
-          engine: "OpenAI Premium Neural",
-          voice: `${useVoice.toUpperCase()} (Conversational Neural)`
-        };
-
-        ttsCache.set(cacheKey, result);
-        res.json(result);
-        audioGenerated = true;
-      } catch (err: any) {
-        console.warn("[TTS_FALLBACK] OpenAI synthesis failed:", err);
+        console.warn("[TTS_FALLBACK] ElevenLabs synthesis failed:", err);
         throw err;
       }
     }

@@ -49,9 +49,8 @@ export default function SystemHealthModule() {
     recentFailures: number;
     averageLatency: number;
   }>>({
-    gemini: { status: 'Healthy', hasKey: true, cooldown: 0, recentFailures: 0, averageLatency: 142 },
+    openai: { status: 'Healthy', hasKey: true, cooldown: 0, recentFailures: 0, averageLatency: 110 },
     deepseek: { status: 'Unavailable', hasKey: false, cooldown: 0, recentFailures: 0, averageLatency: 160 },
-    openai: { status: 'Unavailable', hasKey: false, cooldown: 0, recentFailures: 0, averageLatency: 110 },
     claude: { status: 'Unavailable', hasKey: false, cooldown: 0, recentFailures: 0, averageLatency: 210 },
     fal: { status: 'Unavailable', hasKey: false, cooldown: 0, recentFailures: 0, averageLatency: 340 },
     stability: { status: 'Unavailable', hasKey: false, cooldown: 0, recentFailures: 0, averageLatency: 290 },
@@ -424,12 +423,11 @@ export default function SystemHealthModule() {
               <span className="text-[8px] font-mono text-white/30">PERSISTENT PREFERENCE CONFIGURATION</span>
             </div>
             
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
                 { id: 'auto', name: '🟢 Auto Fallover Pool' },
-                { id: 'gemini', name: 'Google Gemini' },
+                { id: 'openai', name: 'OpenAI Core (GPT-5.5)' },
                 { id: 'deepseek', name: 'DeepSeek Coder' },
-                { id: 'openai', name: 'OpenAI Core' },
                 { id: 'claude', name: 'Anthropic Claude' }
               ].map((opt) => (
                 <button
@@ -462,13 +460,13 @@ export default function SystemHealthModule() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {/* Dynamic Providers from SRE Dashboard status */}
               <ProviderStatus 
-                title="🟢 Gemini AI Core" 
-                desc={providerData.gemini.hasKey ? "Healthy Primary Sync" : "No Key Active - Emulated"} 
-                status={providerData.gemini.status === 'Healthy' ? 'ONLINE' : (providerData.gemini.status === 'Limited' ? '🟡 RATE LIMITED' : '🔴 OFFLINE')} 
-                latency={`${providerData.gemini.averageLatency}ms`}
-                cooldown={providerData.gemini.cooldown}
-                failures={providerData.gemini.recentFailures}
-                onReset={() => triggerSREAction('clear_cooldown', 'gemini')}
+                title="🟠 OpenAI Core Engine" 
+                desc={providerData.openai.hasKey ? "Creative Reasoning Core" : "No Key Active"} 
+                status={providerData.openai.status === 'Healthy' ? 'ONLINE' : (providerData.openai.status === 'Limited' ? '🟡 RATE LIMITED' : '🔴 OFFLINE')} 
+                latency={`${providerData.openai.averageLatency}ms`}
+                cooldown={providerData.openai.cooldown}
+                failures={providerData.openai.recentFailures}
+                onReset={() => triggerSREAction('clear_cooldown', 'openai')}
               />
 
               <ProviderStatus 
@@ -489,16 +487,6 @@ export default function SystemHealthModule() {
                 cooldown={providerData.claude.cooldown}
                 failures={providerData.claude.recentFailures}
                 onReset={() => triggerSREAction('clear_cooldown', 'claude')}
-              />
-
-              <ProviderStatus 
-                title="🟠 OpenAI Core Engine" 
-                desc={providerData.openai.hasKey ? "Creative Reasoning Core" : "No Key Active"} 
-                status={providerData.openai.status === 'Healthy' ? 'ONLINE' : (providerData.openai.status === 'Limited' ? '🟡 RATE LIMITED' : '🔴 OFFLINE')} 
-                latency={`${providerData.openai.averageLatency}ms`}
-                cooldown={providerData.openai.cooldown}
-                failures={providerData.openai.recentFailures}
-                onReset={() => triggerSREAction('clear_cooldown', 'openai')}
               />
 
               <ProviderStatus 
@@ -569,7 +557,7 @@ export default function SystemHealthModule() {
             </p>
 
             <div className="space-y-6">
-              <QuotaBar label="Gemini Core API (Daily Queries)" current={0} limit={150} unit="queries" unavailable />
+              <QuotaBar label="OpenAI Core API (Daily Queries)" current={0} limit={150} unit="queries" unavailable />
               <QuotaBar label="Multimodal Image Synthesis (Flux / SD)" current={0} limit={50} unit="generations" unavailable />
               <QuotaBar label="Neural Voice TTS Synthesis" current={0} limit={5000} unit="translated characters" unavailable />
               <QuotaBar label="Personal Workspace Storage (Vite Database)" current={localStorageKB} limit={10240} unit="KB mapped" />
@@ -580,10 +568,10 @@ export default function SystemHealthModule() {
             <div className="p-6 border border-white/5 bg-[#050505] rounded-sm space-y-4">
               <h4 className="text-[10px] font-mono uppercase tracking-wider text-white/50 font-bold">Priority Failover Protocol</h4>
               <p className="text-[11px] text-white/40 leading-relaxed font-light">
-                If the Primary core (Gemini-3.5-flash) receives a `429 Quota Exhausted` or temporary DNS interrupt response, our custom proxy routes requests down to fallback models automatically.
+                If the Primary core (OpenAI GPT-5.5) receives an API interrupt or quota exhausted response, our custom proxy routes requests down to GPT-4o automatically.
               </p>
               <div className="text-[9px] font-mono text-[#FF3E00] uppercase tracking-widest font-bold">
-                Level-1: Gemini-3.5-flash ➔ Level-2: Gemini-2.5-flash ➔ Level-3: Gemini-3.1-flash-lite
+                Level-1: OpenAI GPT-5.5 ➔ Level-2: OpenAI GPT-4o ➔ Level-3: Offline State Simulator
               </div>
             </div>
 

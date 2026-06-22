@@ -309,7 +309,7 @@ export function useTTSPlayer() {
           isLoading: false,
           isPlaying: true,
           isPaused: false,
-          engine: data.engine || 'Gemini Core',
+          engine: data.engine || 'OpenAI Core',
           voice: data.voice || 'Aoede'
         });
       }

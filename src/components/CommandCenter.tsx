@@ -1175,24 +1175,14 @@ export default function CommandCenter({ messages, onSendMessage, onClearChat, on
                     "text-[10px] tracking-[0.4em] font-mono uppercase animate-pulse",
                     thinkingStatus.startsWith('retrying') ? "text-yellow-500" : "text-[#FF3E00]"
                   )}>
-                     {thinkingStatus === 'thinking' ? "God_Thinking_Mode: EVOLVING" : 
-                      thinkingStatus === 'retrying_1' ? "NEURAL_SATURATION: RETRYING_1 (2.0-FLASH)" :
-                      thinkingStatus === 'retrying_2' ? "BANDWIDTH_LOW: RETRYING_2 (FALLBACK_1.5-FLASH)" :
-                      thinkingStatus === 'retrying_3' ? "SYNCHRONIZING: RETRYING_3 (STABILIZING)" :
-                      thinkingStatus === 'retrying_4' ? "FINAL_LOOP: RETRYING_4 (SYNC_INTENSIVE)" :
-                      "God_Thinking_Mode: EVOLVING"}
+                     {thinkingStatus === 'thinking' ? "Konda AI is thinking..." : "Konda AI is retrying..."}
                   </span>
                   <div className={cn(
                     "h-[1px] flex-1",
                     thinkingStatus.startsWith('retrying') ? "bg-yellow-500/10" : "bg-[#FF3E00]/10"
                   )} />
                </div>
-               <div className="text-[9px] font-mono text-white/25 uppercase tracking-widest">
-                  {thinkingStatus.startsWith('retrying') 
-                    ? "Model high-demand detected. Implementing progressive backoff protocols..."
-                    : "Simulating: Strategist | Architect | Psychologist | Ethicist | Innovator"}
-               </div>
-               <div className="flex space-x-1 mt-1">
+               <div className="flex space-x-1 mt-2">
                   <div className="h-0.5 w-32 bg-white/5 rounded-full overflow-hidden">
                     <motion.div 
                       animate={{ x: [-128, 128] }} 
@@ -2016,8 +2006,7 @@ function MessageActionBar({
       case "gpt55": return "Puck";
       case "forge":
       case "deepseek_coder": return "Charon";
-      case "vision":
-      case "gemini_pro": return "Kore";
+      case "vision": return "Kore";
       default: return "Fenrir";
     }
   };

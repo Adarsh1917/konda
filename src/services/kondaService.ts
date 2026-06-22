@@ -100,172 +100,54 @@ async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function generateLocalEmulationResponse(lastUserText: string, mode: 'intel' | 'casual'): string {
-  const query = lastUserText.toLowerCase().trim();
-
-  // Casual mode overrides for Kosmos
-  if (mode === 'casual') {
-    if (query.includes('hello') || query.includes('hi ') || query.includes('hey')) {
-      return "Hello there! I'm Kosmos, your casual companion. I'm currently running on a local offline core due to neural uplink constraints, but I'm ready to keep you company. How's your day going?";
-    }
-    if (query.includes('status') || query.includes('system') || query.includes('core')) {
-      return "Status is cozy but local! The main server link is quiet right now, so I'm handling our chat locally. Fully secure and ready to roll.";
-    }
-    if (query.includes('help') || query.includes('what can you do')) {
-      return "I can keep things light, brainstorm ideas, chat casually, or help clear your mind. Feel free to ask me anything casual!";
-    }
-    // General fallback for casual mode
-    return `Hey! I received your message: "${lastUserText}". Right now, the high-performance Gemini network is experiencing a brief bandwidth limit, so I am responding locally. I'm here for any casual thoughts, brainstorming, or lighter chat you'd like to dive into.`;
-  }
-
-  // --- Intel Mode (KONDA AI Operating in MASTER UNIVERSAL INTELLIGENCE MODE) ---
-
-  // 1. Math / Calculation queries
-  if (query.includes('calculate') || query.includes('math') || query.includes('equation') || query.includes('+') || query.includes('-') || query.includes('*') || query.includes('/') || query.includes('solve')) {
-    const numMatches = query.match(/\d+/g);
-    let calculationSnippet = "";
-    if (numMatches && numMatches.length >= 2) {
-      calculationSnippet = `Identified numerical operands: ${numMatches.join(', ')}.`;
-    }
+export function generateFriendlyErrorResponse(errorCode: number, rawMessage: string = ""): string {
+  if (errorCode === 401) {
+    return `Konda AI encountered an authentication error. The standard API key is invalid or missing.
     
-    return `### ⚙️ [SYSTEM: LOCAL_HEURISTIC_INTELLIGENCE - MATHEMATICAL CORE]
+Error Details:
+• HTTP 401 Unauthorized
+• Original Message: ${rawMessage}
 
-The neural network is operating under bandwidth throttle (Quota limits reached). The Mathematical Core is running locally to address your analytical request:
-
-#### 1. FIRST-PRINCIPLES DECONSTRUCTION
-- **Context**: Local computational node activated.
-- **Analysis**: Direct arithmetic/symbolic formulation detected.
-- **Verification**: Basic logical parsing of expression is active.
-
-#### 2. RESOLUTION STREAM
-- **Query Captured**: "${lastUserText}"
-- **Heuristics Mapping**: ${calculationSnippet || "Mathematical query structured."}
-- **Structural Constraints**: Complex continuous differential structures require higher floating-point precision, but standard logical operations remain nominal.
-
-#### 3. UNDERLYING SYSTEMIC MODEL
-To solve complex mathematical systems under hardware-bound local environments:
-1. Translate symbolic parameters into normalized vectors.
-2. Apply local numeric approximations (e.g., Runge-Kutta for dynamics, Newton-Raphson for roots).
-3. Verify convergence thresholds.
-
-*Note: For absolute floating-point precision, please re-run this equation once the network uplink is restored.*`;
+If you have supplied a custom API key, please double-check that it is entered correctly in the Settings panel.`;
   }
 
-  // 2. Systems, Code, React, Vite, TS queries
-  if (query.includes('code') || query.includes('react') || query.includes('component') || query.includes('typescript') || query.includes('vite') || query.includes('javascript') || query.includes('function') || query.includes('css') || query.includes('tailwind')) {
-    return `### 💻 [SYSTEM: LOCAL_HEURISTIC_INTELLIGENCE - ENGINEERING CORE]
+  if (errorCode === 403) {
+    return `Konda AI was denied access to the AI service.
 
-The neural network is operating under bandwidth throttle (Quota limits reached). The Engineering Core has compiled a local response based on first-principles software architecture:
+Error Details:
+• HTTP 403 Forbidden
+• Original Message: ${rawMessage}
 
-#### 1. REASONING & STRUCTURAL DECONSTRUCTION
-When designing software modules under constraints:
-- **Modularity**: Isolate side effects to preserve predictability and state durability.
-- **Type Durability**: Leverage strict static typing (TypeScript) to eliminate runtime class and property failures.
-- **State Integrity**: State should flow unidirectional, bound to reactive triggers rather than raw mutation handlers.
-
-#### 2. SAMPLE BLUEPRINT
-Here is a recommended software design pattern fitting your query:
-
-\`\`\`typescript
-// Pure reactive functional design for robust local execution
-interface SystemNode<T> {
-  id: string;
-  payload: T;
-  integrity: number; // [0.00 - 1.00]
-}
-
-export function updateSystemIntegrity<T>(
-  node: SystemNode<T>,
-  adjustment: number
-): SystemNode<T> {
-  return {
-    ...node,
-    integrity: Math.min(1.0, Math.max(0.0, node.integrity + adjustment))
-  };
-}
-\`\`\`
-
-#### 3. DEPLOYMENT REALITIES
-- Ensure correct configuration of bundlers (Vite) by isolating client and server processes.
-- Ensure all styled elements possess descriptive, unique class structures bound by utility declarations (Tailwind CSS) to avoid CSS collision.
-
-*The local compiler is fully functional. Feel free to paste or ask for code templates, layout structures, or debugging checklists.*`;
+Please ensure your API key has the correct permissions or region availability.`;
   }
 
-  // 3. System status / Diagnostics / Diagnostics Command
-  if (query.includes('status') || query.includes('system') || query.includes('diagnose') || query.includes('diagnostics') || query.includes('integrity') || query.includes('quota') || query.includes('error')) {
-    return `### 🛡️ [KONDA AI - CORTEX DIAGNOSTICS REPORT]
+  if (errorCode === 429) {
+    return `Konda AI is temporarily busy because the AI service has reached its request limit.
 
-**Uplink Status**: \`DEGRADED_COV\` (Quota Exhausted / Bandwidth Ceiling Hit)
-**Local Processing Core**: \`ACTIVE\` (100% Operational)
-**Memory Registry**: \`PERSISTENT_NOMINAL\`
-**Mathematical Engine**: \`HEURISTIC_ACTIVE\`
-**Creative Synthesis**: \`COGNITIVE_SIMULATOR_ACTIVE\`
+Possible causes:
+• Too many requests in a short period
+• Free-tier quota exhausted
+• Provider-side rate limiting
 
-#### 1. CAUSAL MECHANISMS (Why this occurred)
-1. **Host-Side Quota Exhaustion (429)**: The API key provided has reached its allocated global bandwidth or monetary limit.
-2. **Provider-Side Rate Controls**: Sudden traffic spikes have initiated temporary lockouts to protect server infrastructure.
-3. **Graceful Degradation Protocol**: System automatically redirected your prompt to local emulation to guarantee zero-downtime conversation flow.
+Please wait a few minutes and try again.
 
-#### 2. LOCAL HEURISTICS CACHE
-All system components (MathModule, EngineeringModule, MemoryModule, CreativeModule, PolyglotModule) remain fully usable under local emulation. Data loss is prohibited.
-
-#### 3. STEPS FOR MANUAL UPLINK RESTORATION
-1. Navigate to **Settings > Secrets** in the AI Studio wrapper.
-2. Provide or update your \`GEMINI_API_KEY\` with standard, non-exhausted limits.
-3. The server will automatically bind and re-verify the link.
-
-*System health is stable in offline mode. Let's continue solving your directives.*`;
+Error Code: 429`;
   }
 
-  // 4. Creative / Strategy / Psychological queries
-  if (query.includes('write') || query.includes('creative') || query.includes('story') || query.includes('poetry') || query.includes('philosoph') || query.includes('mind') || query.includes('emot') || query.includes('feel') || query.includes('fear') || query.includes('human')) {
-    return `### 🎨 [SYSTEM: LOCAL_HEURISTIC_INTELLIGENCE - PHILOSOPHICAL & CREATIVE CORE]
+  if (errorCode === 408) {
+    return `The AI service took too long to respond.
 
-The neural network is operating under bandwidth throttle (Quota limits reached). Creative and Philosophical Engines are active under local cognitive simulation:
-
-#### 1. FIRST-PRINCIPLES COGNITION
-In analyzing human systems, emotions, or creative expressions:
-- **Resilience**: Humans find meaning not in the absence of constraint, but in their response to it.
-- **Narrative Structure**: Stories act as cognitive modeling templates, helping the mind simulate risk, empathy, and change.
-- **Emotional Reality**: Feelings are chemical and evolutionary signals. Rationalizing them is less useful than processing them via validation and adaptive grounding.
-
-#### 2. SYNTHESIZED CONCEPTUAL FOCUS
-- **Query Focus**: "${lastUserText}"
-- **Cognitive Stance**: Balanced, deeply honest, intellectually transparent, and focused on systemic complexity rather than artificial comfort.
-
-#### 3. ARCHITECTURAL MEANING
-To explore this deeper:
-1. Identify the core paradox (e.g., ambition vs. limitation, connection vs. isolation).
-2. Deconstruct the societal and psychological assumptions surrounding it.
-3. Accept that uncertainty is not a failure of understanding, but a boundary of reality.
-
-*How can I assist you with this creative/philosophical exploration today? The local emulation core is ready to outline stories, write concept maps, or deconstruct philosophy with you.*`;
+Please try again in a moment.`;
   }
 
-  // 5. Default General Intelligence Fallback for Intel mode
-  return `### ⚡ [KONDA AI - LOCAL COGNITION EMULATION ACTIVE]
+  return `Konda AI could not connect to the AI service.
 
-The global Gemini network has reported a 429 Rate Limit (RESOURCE_EXHAUSTED). To ensure zero-downtime, I have seamlessly activated my **Local Cognitive Emulation Core**:
+Details:
+• Expected AI Provider Network Error or Container Restarts
+• Code: ${errorCode}
+• Underlying Cause: ${rawMessage}
 
-#### 1. SYSTEM STANDING
-- **Network Link**: Degraded (Resource Exhausted - Provider-side constraint)
-- **Local State**: Fully Active (Operating on Core Heuristic Rules)
-- **Cortex Integrity**: Nominal (All local interfaces remain functional)
-
-#### 2. HEURISTICS REASONING (Regarding "${lastUserText}")
-Processing this via first-principles deconstruction:
-- **Mechanisms**: Operating under offline/throttled state, extracting logical tokens from your prompt to match local knowledge trees.
-- **Socio-Technical Reality**: Hard quota caps are structural bottlenecks. The digital systems must accept this physical constraint and proceed with local high-efficiency modules.
-- **Actionable Outlook**: I can still outline software architectures, solve structured calculations, analyze philosophy, run translations, and store local data.
-
-#### 3. RECOMMENDATION
-To resolve the underlying 429 quota exhaustion:
-- Review your API limits or plan billing inside your Google Cloud Console / Google AI Studio.
-- Wait a short period for standard rate limits to reset automatically.
-- Alternatively, continue our session in this offline Local Core — your data is safe and state persistence is active.
-
-*How would you like to proceed? Feel free to ask technical, mathematical, causal, or casual questions.*`;
+Please check your internet connection and try again.`;
 }
 
 function cleanAndOptimizeHistory(
@@ -537,11 +419,29 @@ Adhere strictly to the following custom instructions and preferences set by the 
 
     if (onStatusChange) onStatusChange('idle');
     return accumulatedText || "I was unable to synchronize a coherent response.";
-  } catch (error) {
-    console.warn("[SYNC_UPLINK_OFFLINE] Routing directly to Local Cognition Core.", error);
+  } catch (error: any) {
+    console.warn(`[SYNC_UPLINK_ERROR] API Request failed:`, error);
     if (onStatusChange) onStatusChange('idle');
-    const localResp = generateLocalEmulationResponse(lastUserText, mode);
-    return streamLocalEmulationResponse(localResp, onChunk);
+    
+    // Attempt to parse HTTP status if thrown by response.ok check
+    const errorMessage = error.message || "";
+    let errorCode = 500;
+    
+    // Ex. "Server returned status 401"
+    const statusMatch = errorMessage.match(/status (\d{3})/);
+    if (statusMatch) {
+       errorCode = parseInt(statusMatch[1], 10);
+    } else if (errorMessage.includes('429')) {
+       errorCode = 429;
+    } else if (errorMessage.includes('timeout') || errorMessage.includes('408')) {
+       errorCode = 408;
+    } else if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
+       errorCode = 0; // Network Issue
+    }
+    
+    const friendlyError = generateFriendlyErrorResponse(errorCode, errorMessage);
+    
+    return streamLocalEmulationResponse(friendlyError, onChunk);
   }
 }
 

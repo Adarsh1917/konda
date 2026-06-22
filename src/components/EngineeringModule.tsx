@@ -27,7 +27,7 @@ const PRESET_TEMPLATES = {
     UserSvc --> Postgre[(PostgreSQL Master)]
     PaySvc --> StripeApi[Stripe Payment API]
     AIHub --> RedisCache[(Redis Session Cache)]
-    AIHub --> GemCore[Gemini Core Node]`,
+    AIHub --> OpenAICore[OpenAI Core Intel Node]`,
   
   serverless: `graph TD
     App([Web App]) --> CloudFront[CloudFront CDN]

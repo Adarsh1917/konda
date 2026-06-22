@@ -16,9 +16,8 @@ interface ProviderStatuses {
 export default function BrainSwitcher() {
   const [isOpen, setIsOpen] = useState(false);
   const [statuses, setStatuses] = useState<ProviderStatuses>({
-    gemini: { status: 'Healthy', hasKey: true, cooldown: 0, recentFailures: 0 },
+    openai: { status: 'Healthy', hasKey: true, cooldown: 0, recentFailures: 0 },
     deepseek: { status: 'Unavailable', hasKey: false, cooldown: 0, recentFailures: 0 },
-    openai: { status: 'Unavailable', hasKey: false, cooldown: 0, recentFailures: 0 },
     claude: { status: 'Unavailable', hasKey: false, cooldown: 0, recentFailures: 0 },
     fal: { status: 'Unavailable', hasKey: false, cooldown: 0, recentFailures: 0 },
     stability: { status: 'Unavailable', hasKey: false, cooldown: 0, recentFailures: 0 },
@@ -34,7 +33,7 @@ export default function BrainSwitcher() {
       }
     } catch (e) {}
     return {
-      chat: 'auto',   // auto, gemini, deepseek, openai, claude
+      chat: 'auto',   // auto, openai, deepseek, claude
       image: 'auto',  // auto, fal, stability
       voice: 'auto'   // auto, browser, elevenlabs, openai
     };
@@ -74,9 +73,8 @@ export default function BrainSwitcher() {
       const h = statuses[providerId];
       if (h && !h.hasKey) {
         const friendlyName = {
-          gemini: 'Gemini',
-          deepseek: 'DeepSeek',
           openai: 'OpenAI',
+          deepseek: 'DeepSeek',
           claude: 'Claude',
           fal: 'FAL.ai',
           stability: 'Stability AI',
@@ -173,10 +171,9 @@ export default function BrainSwitcher() {
               </div>
               <div className="grid grid-cols-1 gap-1">
                 {[
-                  { id: 'auto', label: 'Brain Auto (Gemini Priority)' },
-                  { id: 'gemini', label: 'Google Gemini Pro' },
+                  { id: 'auto', label: 'Brain Auto (OpenAI Priority)' },
+                  { id: 'openai', label: 'OpenAI GPT-5.5 / GPT-4o' },
                   { id: 'deepseek', label: 'DeepSeek Coder / V3' },
-                  { id: 'openai', label: 'OpenAI GPT-4o Engine' },
                   { id: 'claude', label: 'Anthropic Claude-3.5' }
                 ].map((item) => (
                   <button

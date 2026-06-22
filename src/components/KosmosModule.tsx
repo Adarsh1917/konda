@@ -195,10 +195,7 @@ export default function KosmosModule({ onSendMessage, messages, isThinking, thin
             </div>
             {thinkingStatus.startsWith('retrying') && (
               <div className="ml-12 text-[10px] font-mono text-yellow-500/60 uppercase tracking-widest animate-pulse">
-                {thinkingStatus === 'retrying_1' ? "Neural Load High: Retrying (Attempt 1)..." :
-                 thinkingStatus === 'retrying_2' ? "Saturated Path: Switching to Primary Link (Attempt 2)..." :
-                 thinkingStatus === 'retrying_3' ? "Congestion Detected: Buffering (Attempt 3)..." :
-                 "Maximum Saturation: Final Attempt..."}
+                Konda AI is retrying...
               </div>
             )}
           </div>
