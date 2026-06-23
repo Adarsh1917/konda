@@ -179,6 +179,7 @@ interface ProviderInfo {
 }
 
 const providerRegistry: Record<string, ProviderInfo> = {
+  openai: { status: 'Unavailable', hasKey: false, cooldownUntil: 0, recentFailures: 0, averageLatency: 110 },
   gemini: { status: 'Unavailable', hasKey: false, cooldownUntil: 0, recentFailures: 0, averageLatency: 110 },
   deepseek: { status: 'Unavailable', hasKey: false, cooldownUntil: 0, recentFailures: 0, averageLatency: 160 },
   claude: { status: 'Unavailable', hasKey: false, cooldownUntil: 0, recentFailures: 0, averageLatency: 210 },
@@ -196,6 +197,9 @@ interface AutoHealingEvent {
 const autoHealingEvents: AutoHealingEvent[] = [];
 
 function initializeRegistry() {
+  providerRegistry.openai.hasKey = !!process.env.GEMINI_API_KEY; // Emulate openai health based on gemini api key to avoid breaking frontend
+  providerRegistry.openai.status = providerRegistry.openai.hasKey ? 'Healthy' : 'Unavailable';
+
   providerRegistry.deepseek.hasKey = !!process.env.DEEPSEEK_API_KEY;
   providerRegistry.deepseek.status = providerRegistry.deepseek.hasKey ? 'Healthy' : 'Unavailable';
 
@@ -409,7 +413,7 @@ app.post("/api/notifications/trigger", (req, res) => {
 });
 
 // Chat completion with true streaming via Gemini and the SRE Intelligence Pipeline
-app.post("/api/chat", async (req, res) => {
+app.post(["/api/chat", "/api/chat/openai", "/api/chat/gemini", "/api/openai/chat"], async (req, res) => {
   const { messages, mode, systemPrompt, selectedModel } = req.body;
 
   if (!process.env.GEMINI_API_KEY) {
@@ -651,8 +655,9 @@ The multimodal neural animation pipeline (Veo) has generated the requested video
 
     while (attempts <= delays.length) {
       try {
+        const targetModel = selectedModel && selectedModel.startsWith('gemini') ? selectedModel : "gemini-1.5-flash";
         console.log(`[ROUTE_ROUTER] Relaying chat challenge to Gemini, attempt ${attempts + 1}`);
-        geminiStream = await attemptCall("gemini-2.5-flash");
+        geminiStream = await attemptCall(targetModel);
         break; // Stream acquired successfully
       } catch (err: any) {
         lastError = err;
@@ -731,7 +736,7 @@ The multimodal neural animation pipeline (Veo) has generated the requested video
 });
 
 // Image generation API proxy
-app.post("/api/generate-image", async (req, res) => {
+app.post(["/api/generate-image", "/api/openai/image", "/api/image/generate"], async (req, res) => {
   const { prompt, aspectRatio = "1:1", image } = req.body;
 
   try {
@@ -795,7 +800,7 @@ app.get("/api/diagnostics/crashes", (req, res) => {
 // Simple in-memory cache for synthesized voice base64 data to optimize speed and cost
 const ttsCache = new Map<string, { audio: string; format: string; engine: string; voice: string }>();
 
-app.post("/api/tts", async (req, res) => {
+app.post(["/api/tts", "/api/openai/tts"], async (req, res) => {
   const { text, voiceName } = req.body;
   if (!text) {
     res.status(400).json({ error: "Missing text parameter for speech synthesis." });
@@ -1018,9 +1023,15 @@ async function startServer() {
     app.use(vite.middlewares);
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[KONDA_SERVER_CORE] running on http://localhost:${PORT} [ENV: ${process.env.NODE_ENV || 'development'}]`);
-  });
+  if (!process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`[KONDA_SERVER_CORE] running on http://localhost:${PORT} [ENV: ${process.env.NODE_ENV || 'development'}]`);
+    });
+  }
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;
