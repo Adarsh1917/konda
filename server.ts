@@ -655,7 +655,7 @@ The multimodal neural animation pipeline (Veo) has generated the requested video
 
     while (attempts <= delays.length) {
       try {
-        const targetModel = selectedModel && selectedModel.startsWith('gemini') ? selectedModel : "gemini-1.5-flash";
+        const targetModel = selectedModel && selectedModel.startsWith('gemini') ? selectedModel : "gemini-2.5-flash";
         console.log(`[ROUTE_ROUTER] Relaying chat challenge to Gemini, attempt ${attempts + 1}`);
         geminiStream = await attemptCall(targetModel);
         break; // Stream acquired successfully
@@ -717,6 +717,7 @@ The multimodal neural animation pipeline (Veo) has generated the requested video
     
     // Check if we haven't flushed headers (written anything to the stream)
     if (!res.headersSent) {
+      res.removeHeader("Transfer-Encoding"); // Remove this header to prevent HTTP protocol violation with Content-Length
       res.status(is429 ? 429 : (isTimeout ? 408 : 503)).json({ error: errMsg });
       return;
     } else {
