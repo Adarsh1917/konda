@@ -4,9 +4,10 @@ import {
   Activity, Cpu, Shield, Key, HardDrive, RefreshCw, AlertTriangle, 
   Terminal, CheckCircle, Play, Bell, Lock, Zap, Clock, ThumbsUp
 } from 'lucide-react';
+import ProductivityMetrics from './ProductivityMetrics';
 
 export default function SystemHealthModule() {
-  const [activeTab, setActiveTab] = useState<'monitoring' | 'quotas' | 'logs'>('monitoring');
+  const [activeTab, setActiveTab] = useState<'monitoring' | 'quotas' | 'logs' | 'productivity'>('monitoring');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [showNotificationTest, setShowNotificationTest] = useState(false);
@@ -266,7 +267,7 @@ export default function SystemHealthModule() {
 
       {/* Tabs */}
       <div className="flex gap-4 border-b border-white/5 pb-4 mb-8">
-        {(['monitoring', 'quotas', 'logs'] as const).map((tab) => (
+        {(['monitoring', 'quotas', 'logs', 'productivity'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -280,7 +281,7 @@ export default function SystemHealthModule() {
                 className="absolute bottom-0 left-0 w-full h-[2px] bg-[#FF3E00]" 
               />
             )}
-            {tab === 'monitoring' ? 'Node_Telemetry' : tab === 'quotas' ? 'Uplink_Quotas' : 'Event_Log_Journal'}
+            {tab === 'monitoring' ? 'Node_Telemetry' : tab === 'quotas' ? 'Uplink_Quotas' : tab === 'logs' ? 'Event_Log_Journal' : 'Productivity_Core'}
           </button>
         ))}
       </div>
@@ -604,6 +605,10 @@ export default function SystemHealthModule() {
             ))}
           </div>
         </div>
+      )}
+
+      {activeTab === 'productivity' && (
+        <ProductivityMetrics />
       )}
     </div>
   );
